@@ -173,7 +173,7 @@ inline int locate_scaffold_sequence(const string& sequence, const string& scaffo
 
 inline string safe_substr(const string& sequence, int pos, int length) {
 	if (pos + length > sequence.length()) {
-		printf("Warning: Sequence length %d is too short (expected to be at least %d)!\n", (int)sequence.length(), pos + length);
+		printf("Error: Sequence length %d is too short (expected to be at least %d)!\n", (int)sequence.length(), pos + length);
 		exit(-1);		
 	}
 	return sequence.substr(pos, length);
@@ -182,18 +182,23 @@ inline string safe_substr(const string& sequence, int pos, int length) {
 
 // extra_info is the skeleton sequence for crispr and total-A/B/C for antibody
 inline bool extract_feature_barcode(const string& sequence, int feature_length, const string& feature_type, const string& extra_info, string& feature_barcode) {
-	bool success;
+	bool success = true;
 	int start_pos, end_pos, best_value; // here start_pos and end_pos are with respect to feature sequence.
 
-	if (feature_type == "antibody") {
-		success = true;
+	if (feature_type == "antibody")
 		feature_barcode = safe_substr(sequence, totalseq_barcode_pos, feature_length);
-	}
 	else {
 		// start_pos = match_tso ? matching(sequence, TSO, 3, 0, best_value) : 0; // match template switch oligo
-		start_pos = 0; // temporarily disable TSO matching
-		success = start_pos >= 0;
-		if (success) {
+		// success = start_pos >= 0;
+		// if (success) {
+		// }
+		if (extra_info == "") {
+			// No scaffold sequence, assume barcode starts at position 0
+			feature_barcode = safe_substr(sequence, 0, feature_length);
+		}
+		else {
+			// With scaffold sequence, locate it first
+			start_pos = 0; // temporarily disable TSO matching
 			end_pos = locate_scaffold_sequence(sequence, extra_info, start_pos + feature_length - max_mismatch_feature, sequence.length() - (extra_info.length() - 2), 2);
 			success = end_pos >= 0;
 			if (success) {
@@ -201,7 +206,7 @@ inline bool extract_feature_barcode(const string& sequence, int feature_length, 
 					feature_barcode = safe_substr(sequence, end_pos - feature_length, feature_length);
 				else 
 					feature_barcode = string(feature_length - (end_pos - start_pos), 'N') + safe_substr(sequence, start_pos, end_pos - start_pos);
-			}
+			}				
 		}
 	}
 
@@ -255,7 +260,7 @@ int main(int argc, char* argv[]) {
 		printf("\t--feature feature_type\tfeature type can be either antibody or crispr [default: antibody]\n");
 		printf("\t--max-mismatch-feature #\tmaximum number of mismatches allowed for feature barcodes [default: 3]\n");
 		printf("\t--umi-length len\tlength of the UMI sequence [default: 10]\n");
-		printf("\t--scaffold-sequence sequence\tscaffold sequence used to locate the protospacer for sgRNA\n");
+		printf("\t--scaffold-sequence sequence\tscaffold sequence used to locate the protospacer for sgRNA. If this option is not set for crispr data, assume barcode starts at position 0 of read 2.\n");
 		printf("\t--no-match-tso\tdo not match template switching oligo for crispr data\n");
 		printf("Outputs:\n\toutput_name.csv\tfeature-cell count matrix. First row: [Antibody/CRISPR],barcode_1,...,barcode_n;Other rows: feature_name,feature_count_1,...,feature_count_n\n");
 		printf("\toutput_name.stat.csv.gz\tgzipped sufficient statistics file. First row: Barcode,UMI,Feature,Count; Other rows: each row describe the read count for one barcode-umi-feature combination\n");
@@ -309,15 +314,14 @@ int main(int argc, char* argv[]) {
 			printf("Do not support unknown feature type %s!\n", feature_type.c_str());
 			exit(-1);
 		}
-		if (extra_info == "") {
-			printf("Scaffold sequence is required for feature type crispr!\n");
-			exit(-1);
-		}
+		if (extra_info == "")
+			printf("Scaffold sequence is not provided. Assume that barcode starts at position 0 of read 2.\n");
 	}
 
 	int cnt = 0;
 	string cell_barcode, umi, feature_barcode;
 	uint64_t binary_cell, binary_umi, binary_feature;
+	int read1_len;
 	
 	dataCollector.clear();
 
@@ -337,6 +341,11 @@ int main(int argc, char* argv[]) {
 					binary_feature = barcode_to_binary(feature_barcode);
 					feature_iter = feature_index.find(binary_feature);
 					if (feature_iter != feature_index.end() && feature_iter->second.item_id >= 0) {
+						read1_len = read1.seq.length();
+						if (read1_len < cell_blen + umi_len) {
+							printf("Warning: Detected read1 length %d is smaller than cell barcode length %d + UMI length %d. Shorten UMI length to %d!\n", read1_len, cell_blen, umi_len, read1_len - cell_blen);
+							umi_len = read1_len - cell_blen;
+						}
 						umi = safe_substr(read1.seq, cell_blen, umi_len);
 						binary_umi = barcode_to_binary(umi);
 
