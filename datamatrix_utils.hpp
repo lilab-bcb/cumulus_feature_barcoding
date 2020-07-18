@@ -26,7 +26,7 @@ public:
 		++data_container[cell_id][umi][feature_id];
 	}
 
-	void output(const std::string& output_name, const std::string& feature_type, int n_feature, const std::vector<std::string>& cell_names, int umi_len, const std::vector<std::string>& feature_names) {
+	void output(const std::string& output_name, const std::string& feature_type, int feature_start, int feature_end, const std::vector<std::string>& cell_names, int umi_len, const std::vector<std::string>& feature_names) {
 		std::vector<int> cell_ids;
 		std::ofstream fout;
 		oGZipFile fstat;
@@ -37,7 +37,7 @@ public:
 		if (cell_ids.size() > 1) std::sort(cell_ids.begin(), cell_ids.end());
 
 		std::vector<int> dummy(cell_ids.size(), 0), tot_umis(cell_ids.size(), 0);
-		std::vector<std::vector<int> > ADTs(n_feature, dummy);
+		std::vector<std::vector<int> > ADTs(feature_end - feature_start, dummy);
 		double denom;
 		int total_reads = 0, total_umis = 0;
 
@@ -50,7 +50,7 @@ public:
 					fstat()<< cell_names[cell_ids[i]]<< ","<< binary_to_barcode(kv1.first, umi_len)<< ","<< feature_names[kv2.first]<< ","<< kv2.second<< std::endl;
 					total_reads += kv2.second;
 					++total_umis;
-					++ADTs[kv2.first][i];
+					++ADTs[kv2.first - feature_start][i];
 					++tot_umis[i];
 				}
 			}
@@ -63,10 +63,10 @@ public:
 		for (int i = 0; i < (int)cell_ids.size(); ++i)
 			if (tot_umis[i] > 0) fout<< ","<< cell_names[cell_ids[i]];
 		fout<< std::endl;
-		for (int i = 0; i < n_feature; ++i) {
+		for (int i = feature_start; i < feature_end; ++i) {
 			fout<< feature_names[i];
 			for (int j = 0; j < (int)cell_ids.size(); ++j) 
-				if (tot_umis[j] > 0) fout<< ","<< ADTs[i][j];
+				if (tot_umis[j] > 0) fout<< ","<< ADTs[i - feature_start][j];
 			fout<< std::endl;
 		}
 		fout.close();

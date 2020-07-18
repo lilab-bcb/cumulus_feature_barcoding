@@ -47,9 +47,13 @@ vector<string> cell_names, feature_names;
 HashType cell_index, feature_index;
 HashIterType cell_iter, feature_iter;
 
-DataCollector dataCollector;
-
 int f[2][7]; // for banded dynamic programming, max allowed mismatch = 3
+
+
+int n_cat; // number of feature categories (e.g. hashing, citeseq)
+vector<string> cat_names; // category names
+vector<int> cat_nfs, feature_categories; // cat_nfs, number of features in each category; int representing categories.
+vector<DataCollector> dataCollectors;
 
 
 
@@ -249,11 +253,39 @@ void detect_totalseq_type(string& extra_info) {
 }
 
 
+void parse_feature_names(int n_feature, vector<string>& feature_names, int& n_cat, vector<string>& cat_names, vector<int>& cat_nfs, vector<int>& feature_categories) {
+	std::size_t pos;
+	string cat_str;
+
+	n_cat = 0;
+
+	pos = feature_names[0].find_first_of(',');
+	if (pos != string::npos) {
+		cat_names.clear();
+		cat_nfs.clear();		
+		feature_categories.resize(n_feature, 0);
+		for (int i = 0; i < n_feature; ++i) {
+			pos = feature_names[i].find_first_of(',');
+			assert(pos != string::npos);
+			cat_str = feature_names[i].substr(pos + 1);
+			feature_names[i] = feature_names[i].substr(0, pos);
+			if (n_cat == 0 || cat_names.back() != cat_str) {
+				cat_names.push_back(cat_str);
+				cat_nfs.push_back(i);
+				++n_cat;
+			}
+			feature_categories[i] = n_cat - 1;
+		}
+		cat_nfs.push_back(n_feature);
+	}
+}
+
+
 int main(int argc, char* argv[]) {
 	if (argc < 5) {
 		printf("Usage: generate_count_matrix_ADTs cell_barcodes.txt[.gz] feature_barcodes.csv fastq_folders output_name [--max-mismatch-cell #] [--feature feature_type] [--max-mismatch-feature #] [--umi-length len] [--scaffold-sequence sequence] [--no-match-tso]\n");
 		printf("Arguments:\n\tcell_barcodes.txt[.gz]\t10x genomics barcode white list\n");
-		printf("\tfeature_barcodes.csv\tfeature barcode file;barcode,feature_name\n");
+		printf("\tfeature_barcodes.csv\tfeature barcode file;barcode,feature_name[,feature_category]. Optional feature_category is required only if hashing and citeseq data share the same sample index\n");
 		printf("\tfastq_folders\tfolder contain all R1 and R2 FASTQ files ending with 001.fastq.gz\n");
 		printf("\toutput_name\toutput file name prefix;output_name.csv and output_name.stat.csv\n");
 		printf("Options:\n\t--max-mismatch-cell #\tmaximum number of mismatches allowed for cell barcodes [default: 1]\n");
@@ -263,7 +295,8 @@ int main(int argc, char* argv[]) {
 		printf("\t--scaffold-sequence sequence\tscaffold sequence used to locate the protospacer for sgRNA. If this option is not set for crispr data, assume barcode starts at position 0 of read 2.\n");
 		printf("\t--no-match-tso\tdo not match template switching oligo for crispr data\n");
 		printf("Outputs:\n\toutput_name.csv\tfeature-cell count matrix. First row: [Antibody/CRISPR],barcode_1,...,barcode_n;Other rows: feature_name,feature_count_1,...,feature_count_n\n");
-		printf("\toutput_name.stat.csv.gz\tgzipped sufficient statistics file. First row: Barcode,UMI,Feature,Count; Other rows: each row describe the read count for one barcode-umi-feature combination\n");
+		printf("\toutput_name.stat.csv.gz\tgzipped sufficient statistics file. First row: Barcode,UMI,Feature,Count; Other rows: each row describe the read count for one barcode-umi-feature combination\n\n");
+		printf("\tIf feature_category presents, this program will output the above two files for each feature_category. For example, if feature_category is hashing, output_name.hashing.csv and output_name.hashing.stat.csv.gz will be generated.\n");
 		exit(-1);
 	}
 
@@ -304,6 +337,7 @@ int main(int argc, char* argv[]) {
 	printf("Time spent on parsing cell barcodes = %.2fs.\n", difftime(time(NULL), a));
 	printf("Load feature barcodes.\n");
 	parse_sample_sheet(argv[2], n_feature, feature_blen, feature_index, feature_names, max_mismatch_feature);
+	parse_feature_names(n_feature, feature_names, n_cat, cat_names, cat_nfs, feature_categories);
 
 	parse_input_directory(argv[3]);
 
@@ -322,13 +356,13 @@ int main(int argc, char* argv[]) {
 	string cell_barcode, umi, feature_barcode;
 	uint64_t binary_cell, binary_umi, binary_feature;
 	int read1_len;
-	
-	dataCollector.clear();
+	int feature_id, collector_pos;
+
+	dataCollectors.resize(n_cat > 0 ? n_cat : 1);
 
 	for (auto&& input_fastq : inputs) {
 		gzip_in_r1.open(input_fastq.input_r1.c_str());
 		gzip_in_r2.open(input_fastq.input_r2.c_str());
-
 		while (gzip_in_r1.next(read1) == 4 && gzip_in_r2.next(read2) == 4) {
 			++cnt;
 			
@@ -349,7 +383,9 @@ int main(int argc, char* argv[]) {
 						umi = safe_substr(read1.seq, cell_blen, umi_len);
 						binary_umi = barcode_to_binary(umi);
 
-						dataCollector.insert(cell_iter->second.item_id, binary_umi, feature_iter->second.item_id);
+						feature_id = feature_iter->second.item_id;
+						collector_pos = n_cat > 0 ? feature_categories[feature_id] : 0;
+						dataCollectors[collector_pos].insert(cell_iter->second.item_id, binary_umi, feature_id);
 					}
 				}
 			}
@@ -363,7 +399,14 @@ int main(int argc, char* argv[]) {
 
 	printf("Parsing input data is finished.\n");
 
-	dataCollector.output(argv[4], feature_type, n_feature, cell_names, umi_len, feature_names);
+	string output_name = argv[4];
+	if (n_cat == 0)
+		dataCollectors[0].output(output_name, feature_type, 0, n_feature, cell_names, umi_len, feature_names);
+	else 
+		for (int i = 0; i < n_cat; ++i) {
+			printf("Feature '%s':\n", cat_names[i].c_str());
+			dataCollectors[i].output(output_name + "." + cat_names[i], feature_type, cat_nfs[i], cat_nfs[i + 1], cell_names, umi_len, feature_names);
+		}
 
 	b = time(NULL);
 	printf("Time spent = %.2fs.\n", difftime(b, a));
