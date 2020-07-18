@@ -1,5 +1,7 @@
 # Cumulus Tool on Feature Barcoding
 
+[![](https://img.shields.io/github/v/release/klarman-cell-observatory/cumulus_feature_barcoding.svg)](https://github.com/klarman-cell-observatory/cumulus_feature_barcoding/releases)
+
 A fast C++ tool to extract feature-count matrix from sequence reads in FASTQ files. It is used by Cumulus for feature-count matrix generation of cell hashing, nucleus hashing, CITE-Seq and Perturb-seq protocols, using either 10x Genomics V2 or V3 chemistry.
 
 ## Installation
@@ -25,7 +27,7 @@ cd cumulus_feature_barcoding
 make all
 ```
 
-4. Now you'll have an executable named ``generate_count_matrix_ADTs`` inside your folder. Type 
+4. Now you'll have an executable named ``generate_count_matrix_ADTs`` inside your folder. Type
 
 ```
 ./generate_count_matrix_ADTs
