@@ -247,7 +247,7 @@ void detect_totalseq_type(string& extra_info) {
 		exit(-1);
 	}
 
-	extra_info = (ntotA > ntotBC ? "TotalSeq-A" : "TotalSeq-B or TotalSeq-C");
+	extra_info = (ntotA > ntotBC ? "TotalSeq-A" : (umi_len == 12 ? "TotalSeq-B" : "TotalSeq-C"));
 	totalseq_barcode_pos = (extra_info == "TotalSeq-A" ? totalseq_A_pos : totalseq_BC_pos);
 	printf("TotalSeq type is automatically detected as %s, barcode starts from 0-based position %d.\n", extra_info.c_str(), totalseq_barcode_pos);
 }
@@ -332,9 +332,6 @@ int main(int argc, char* argv[]) {
 		}
 	}
 
-	printf("Load cell barcodes.\n");
-	parse_sample_sheet(argv[1], n_cell, cell_blen, cell_index, cell_names, max_mismatch_cell, (feature_type == "crispr" ? true: false));
-	printf("Time spent on parsing cell barcodes = %.2fs.\n", difftime(time(NULL), a));
 	printf("Load feature barcodes.\n");
 	parse_sample_sheet(argv[2], n_feature, feature_blen, feature_index, feature_names, max_mismatch_feature);
 	parse_feature_names(n_feature, feature_names, n_cat, cat_names, cat_nfs, feature_categories);
@@ -351,6 +348,11 @@ int main(int argc, char* argv[]) {
 		if (extra_info == "")
 			printf("Scaffold sequence is not provided. Assume that barcode starts at position 0 of read 2.\n");
 	}
+
+	printf("Load cell barcodes.\n");
+	parse_sample_sheet(argv[1], n_cell, cell_blen, cell_index, cell_names, max_mismatch_cell, (feature_type == "antibody" && extra_info == "TotalSeq-B") || (feature_type == "crispr" && umi_len == 12));
+	printf("Time spent on parsing cell barcodes = %.2fs.\n", difftime(time(NULL), a));
+
 
 	int cnt = 0;
 	string cell_barcode, umi, feature_barcode;
