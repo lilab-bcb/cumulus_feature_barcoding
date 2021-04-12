@@ -57,7 +57,7 @@ if argv[1] == 'crispr':
 	print("Keep UMIs with at least {} reads.".format(count_threshold))
 
 	tot_reads = df.groupby(['Barcode', 'UMI'])['Count'].sum()
-	df['Ratio'] = df['Count'] / tot_reads[df[['Barcode', 'UMI']].values].values
+	df['Ratio'] = df['Count'] / tot_reads[pd.Index(df[['Barcode', 'UMI']])].values
 	idx = (df['Count'].values >= count_threshold) & (df['Ratio'].values > float(argv[4]))
 
 	new_df = df[idx]
