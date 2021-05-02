@@ -32,6 +32,7 @@ struct InputFile{
 
 int max_mismatch_cell, max_mismatch_feature, umi_len;
 string feature_type, extra_info;
+bool convert_cell_barcode;
 bool match_tso;
 
 int totalseq_barcode_pos; // Total-Seq A 0; Total-Seq B or C 10.
@@ -292,6 +293,7 @@ int main(int argc, char* argv[]) {
 		printf("\t--feature feature_type\tfeature type can be either antibody or crispr [default: antibody]\n");
 		printf("\t--max-mismatch-feature #\tmaximum number of mismatches allowed for feature barcodes [default: 3]\n");
 		printf("\t--umi-length len\tlength of the UMI sequence [default: 10]\n");
+		printf("\t--convert-cell-barcode\tconvert cell barcode to match RNA cell barcodes for 10x Genomics' data\n");
 		printf("\t--scaffold-sequence sequence\tscaffold sequence used to locate the protospacer for sgRNA. If this option is not set for crispr data, assume barcode starts at position 0 of read 2.\n");
 		printf("\t--no-match-tso\tdo not match template switching oligo for crispr data\n");
 		printf("Outputs:\n\toutput_name.csv\tfeature-cell count matrix. First row: [Antibody/CRISPR],barcode_1,...,barcode_n;Other rows: feature_name,feature_count_1,...,feature_count_n\n");
@@ -309,6 +311,7 @@ int main(int argc, char* argv[]) {
 	max_mismatch_feature = 3;
 	umi_len = 10;
 	extra_info = "";
+	convert_cell_barcode = false;
 	match_tso = true;
 
 	for (int i = 5; i < argc; ++i) {
@@ -323,6 +326,9 @@ int main(int argc, char* argv[]) {
 		}
 		if (!strcmp(argv[i], "--umi-length")) {
 			umi_len = atoi(argv[i + 1]);
+		}
+		if (!strcmp(argv[i], "--convert-cell-barcode")) {
+			convert_cell_barcode = true;
 		}
 		if (!strcmp(argv[i], "--scaffold-sequence")) {
 			extra_info = argv[i + 1];
@@ -350,9 +356,9 @@ int main(int argc, char* argv[]) {
 	}
 
 	printf("Load cell barcodes.\n");
-	parse_sample_sheet(argv[1], n_cell, cell_blen, cell_index, cell_names, max_mismatch_cell, (feature_type == "antibody" && extra_info == "TotalSeq-B") || (feature_type == "crispr" && umi_len == 12));
+	convert_cell_barcode = convert_cell_barcode || (feature_type == "antibody" && extra_info == "TotalSeq-B") || (feature_type == "crispr" && umi_len == 12);
+	parse_sample_sheet(argv[1], n_cell, cell_blen, cell_index, cell_names, max_mismatch_cell, convert_cell_barcode);
 	printf("Time spent on parsing cell barcodes = %.2fs.\n", difftime(time(NULL), a));
-
 
 	int cnt = 0;
 	string cell_barcode, umi, feature_barcode;
