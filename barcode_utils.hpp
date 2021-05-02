@@ -137,7 +137,7 @@ inline void mutate_index(HashType& index_dict, uint64_t binary_id, int len, int 
 	}
 }
 
-void parse_sample_sheet(const char* sample_sheet_file, int& n_barcodes, int& barcode_len, HashType& index_dict, std::vector<std::string>& index_names, int max_mismatch = 1, bool convert_to_guide_cell_barcode = false) {
+void parse_sample_sheet(const char* sample_sheet_file, int& n_barcodes, int& barcode_len, HashType& index_dict, std::vector<std::string>& index_names, int max_mismatch = 1, bool convert_cell_barcode = false) {
 	iGZipFile fin(sample_sheet_file);
 	std::string line, index_name, index_seq;
 	std::size_t pos;
@@ -157,7 +157,7 @@ void parse_sample_sheet(const char* sample_sheet_file, int& n_barcodes, int& bar
 		if (barcode_len == 0) barcode_len = index_seq.length();
 		else assert(barcode_len == index_seq.length());
 		
-		if (convert_to_guide_cell_barcode) {
+		if (convert_cell_barcode) {
 			pos = barcode_len / 2 - 1;
 			index_seq[pos] = base2rcbase[index_seq[pos]];
 			++pos;
