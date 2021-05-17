@@ -231,9 +231,11 @@ void detect_totalseq_type(string& extra_info) {
 			feature_iter = feature_index.find(binary_feature);
 			ntotA += (feature_iter != feature_index.end() && feature_iter->second.item_id >= 0);
 
-			binary_feature = barcode_to_binary(safe_substr(read2.seq, totalseq_BC_pos, feature_blen));
-			feature_iter = feature_index.find(binary_feature);
-			ntotBC += (feature_iter != feature_index.end() && feature_iter->second.item_id >= 0);
+			if (read2.seq.length() >= totalseq_BC_pos + feature_blen) {
+				binary_feature = barcode_to_binary(safe_substr(read2.seq, totalseq_BC_pos, feature_blen));
+				feature_iter = feature_index.find(binary_feature);
+				ntotBC += (feature_iter != feature_index.end() && feature_iter->second.item_id >= 0);				
+			}
 
 			++cnt;
 		}
