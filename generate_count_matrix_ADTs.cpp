@@ -358,7 +358,7 @@ int main(int argc, char* argv[]) {
 	}
 
 	printf("Load cell barcodes.\n");
-	convert_cell_barcode = convert_cell_barcode || (feature_type == "antibody" && extra_info == "TotalSeq-B") || (feature_type == "crispr" && umi_len == 12);
+	convert_cell_barcode = convert_cell_barcode || (feature_type == "antibody" && (extra_info == "TotalSeq-B" || extra_info == "TotalSeq-C")) || (feature_type == "crispr" && umi_len == 12);
 	parse_sample_sheet(argv[1], n_cell, cell_blen, cell_index, cell_names, max_mismatch_cell, convert_cell_barcode);
 	printf("Time spent on parsing cell barcodes = %.2fs.\n", difftime(time(NULL), a));
 
