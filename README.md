@@ -35,4 +35,26 @@ make all
 
 to see its usage.
 
+### Compile on Mac OS
+
+1. Install boost
+
+```
+conda install -c conda-forge boost
+```
+
+2. Set up environment variables
+
+```
+export CPATH=/opt/miniconda3/envs/your_env/include
+export LIBRARY_PATH=/opt/miniconda3/envs/your_env/lib
+```
+
+3. Compile
+
+```
+cd cumulus_feature_barcoding
+make all
+```
+
 ## Usage
