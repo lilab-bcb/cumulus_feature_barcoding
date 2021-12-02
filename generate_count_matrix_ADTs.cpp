@@ -31,11 +31,11 @@ struct InputFile{
 };
 
 int max_mismatch_cell, max_mismatch_feature, umi_len;
-string feature_type, extra_info;
+string feature_type, totalseq_type, scaffold_sequence;
+int barcode_pos; // Antibody: Total-Seq A 0; Total-Seq B or C 10. Crispr: default 0, can be set by option
 bool convert_cell_barcode;
-bool match_tso;
 
-int totalseq_barcode_pos; // Total-Seq A 0; Total-Seq B or C 10.
+time_t start_time, end_time;
 
 vector<InputFile> inputs; 
 
@@ -185,40 +185,29 @@ inline string safe_substr(const string& sequence, int pos, int length) {
 }
 
 
-// extra_info is the skeleton sequence for crispr and total-A/B/C for antibody
-inline bool extract_feature_barcode(const string& sequence, int feature_length, const string& feature_type, const string& extra_info, string& feature_barcode) {
+inline bool extract_feature_barcode(const string& sequence, int feature_length, const string& feature_type, string& feature_barcode) {
 	bool success = true;
 	int start_pos, end_pos, best_value; // here start_pos and end_pos are with respect to feature sequence.
 
-	if (feature_type == "antibody")
-		feature_barcode = safe_substr(sequence, totalseq_barcode_pos, feature_length);
+	if (feature_type == "antibody" || scaffold_sequence == "")
+		feature_barcode = safe_substr(sequence, barcode_pos, feature_length);
 	else {
-		// start_pos = match_tso ? matching(sequence, TSO, 3, 0, best_value) : 0; // match template switch oligo
-		// success = start_pos >= 0;
-		// if (success) {
-		// }
-		if (extra_info == "") {
-			// No scaffold sequence, assume barcode starts at position 0
-			feature_barcode = safe_substr(sequence, 0, feature_length);
-		}
-		else {
-			// With scaffold sequence, locate it first
-			start_pos = 0; // temporarily disable TSO matching
-			end_pos = locate_scaffold_sequence(sequence, extra_info, start_pos + feature_length - max_mismatch_feature, sequence.length() - (extra_info.length() - 2), 2);
-			success = end_pos >= 0;
-			if (success) {
-				if (end_pos - start_pos >= feature_length) 
-					feature_barcode = safe_substr(sequence, end_pos - feature_length, feature_length);
-				else 
-					feature_barcode = string(feature_length - (end_pos - start_pos), 'N') + safe_substr(sequence, start_pos, end_pos - start_pos);
-			}				
+		// With scaffold sequence, locate it first
+		start_pos = 0; // temporarily disable TSO matching
+		end_pos = locate_scaffold_sequence(sequence, scaffold_sequence, start_pos + feature_length - max_mismatch_feature, sequence.length() - (scaffold_sequence.length() - 2), 2);
+		success = end_pos >= 0;
+		if (success) {
+			if (end_pos - start_pos >= feature_length) 
+				feature_barcode = safe_substr(sequence, end_pos - feature_length, feature_length);
+			else 
+				feature_barcode = string(feature_length - (end_pos - start_pos), 'N') + safe_substr(sequence, start_pos, end_pos - start_pos);
 		}
 	}
 
 	return success;
 }
 
-void detect_totalseq_type(string& extra_info) {
+void detect_totalseq_type() {
 	const int nskim = 10000; // Look at first 10000 reads.
 	int ntotA, ntotBC, cnt;
 	uint64_t binary_feature;
@@ -250,9 +239,9 @@ void detect_totalseq_type(string& extra_info) {
 		exit(-1);
 	}
 
-	extra_info = (ntotA > ntotBC ? "TotalSeq-A" : (umi_len == 12 ? "TotalSeq-B" : "TotalSeq-C"));
-	totalseq_barcode_pos = (extra_info == "TotalSeq-A" ? totalseq_A_pos : totalseq_BC_pos);
-	printf("TotalSeq type is automatically detected as %s, barcode starts from 0-based position %d.\n", extra_info.c_str(), totalseq_barcode_pos);
+	totalseq_type = (ntotA > ntotBC ? "TotalSeq-A" : (umi_len == 12 ? "TotalSeq-B" : "TotalSeq-C"));
+	barcode_pos = (totalseq_type == "TotalSeq-A" ? totalseq_A_pos : totalseq_BC_pos);
+	printf("TotalSeq type is automatically detected as %s, barcode starts from 0-based position %d.\n", totalseq_type.c_str(), barcode_pos);
 }
 
 
@@ -286,7 +275,7 @@ void parse_feature_names(int n_feature, vector<string>& feature_names, int& n_ca
 
 int main(int argc, char* argv[]) {
 	if (argc < 5) {
-		printf("Usage: generate_count_matrix_ADTs cell_barcodes.txt[.gz] feature_barcodes.csv fastq_folders output_name [--max-mismatch-cell #] [--feature feature_type] [--max-mismatch-feature #] [--umi-length len] [--scaffold-sequence sequence] [--no-match-tso]\n");
+		printf("Usage: generate_count_matrix_ADTs cell_barcodes.txt[.gz] feature_barcodes.csv fastq_folders output_name [--max-mismatch-cell #] [--feature feature_type] [--max-mismatch-feature #] [--umi-length len] [--barcode-pos #] [--convert-cell-barcode] [--scaffold-sequence sequence]\n");
 		printf("Arguments:\n\tcell_barcodes.txt[.gz]\t10x genomics barcode white list\n");
 		printf("\tfeature_barcodes.csv\tfeature barcode file;barcode,feature_name[,feature_category]. Optional feature_category is required only if hashing and citeseq data share the same sample index\n");
 		printf("\tfastq_folders\tfolder contain all R1 and R2 FASTQ files ending with 001.fastq.gz\n");
@@ -295,26 +284,25 @@ int main(int argc, char* argv[]) {
 		printf("\t--feature feature_type\tfeature type can be either antibody or crispr [default: antibody]\n");
 		printf("\t--max-mismatch-feature #\tmaximum number of mismatches allowed for feature barcodes [default: 3]\n");
 		printf("\t--umi-length len\tlength of the UMI sequence [default: 10]\n");
+		printf("\t--barcode-pos #\tstart position of barcode in read 2, 0-based coordinate [default: automatically determined for antibody; 0 for crispr].\n");
 		printf("\t--convert-cell-barcode\tconvert cell barcode to match RNA cell barcodes for 10x Genomics' data\n");
 		printf("\t--scaffold-sequence sequence\tscaffold sequence used to locate the protospacer for sgRNA. If this option is not set for crispr data, assume barcode starts at position 0 of read 2.\n");
-		printf("\t--no-match-tso\tdo not match template switching oligo for crispr data\n");
 		printf("Outputs:\n\toutput_name.csv\tfeature-cell count matrix. First row: [Antibody/CRISPR],barcode_1,...,barcode_n;Other rows: feature_name,feature_count_1,...,feature_count_n\n");
 		printf("\toutput_name.stat.csv.gz\tgzipped sufficient statistics file. First row: Barcode,UMI,Feature,Count; Other rows: each row describe the read count for one barcode-umi-feature combination\n\n");
 		printf("\tIf feature_category presents, this program will output the above two files for each feature_category. For example, if feature_category is hashing, output_name.hashing.csv and output_name.hashing.stat.csv.gz will be generated.\n");
 		exit(-1);
 	}
 
-	time_t a, b;
-
-	a = time(NULL);
+	start_time = time(NULL);
 
 	max_mismatch_cell = 1;
 	feature_type = "antibody";
 	max_mismatch_feature = 3;
 	umi_len = 10;
-	extra_info = "";
+	barcode_pos = -1;
+	totalseq_type = "";
+	scaffold_sequence = "";
 	convert_cell_barcode = false;
-	match_tso = true;
 
 	for (int i = 5; i < argc; ++i) {
 		if (!strcmp(argv[i], "--max-mismatch-cell")) {
@@ -329,14 +317,14 @@ int main(int argc, char* argv[]) {
 		if (!strcmp(argv[i], "--umi-length")) {
 			umi_len = atoi(argv[i + 1]);
 		}
+		if (!strcmp(argv[i], "--barcode-pos")) {
+			barcode_pos = atoi(argv[i + 1]);
+		}
 		if (!strcmp(argv[i], "--convert-cell-barcode")) {
 			convert_cell_barcode = true;
 		}
 		if (!strcmp(argv[i], "--scaffold-sequence")) {
-			extra_info = argv[i + 1];
-		}
-		if (!strcmp(argv[i], "--no-match-tso")) {
-			match_tso = false;
+			scaffold_sequence = argv[i + 1];
 		}
 	}
 
@@ -347,20 +335,19 @@ int main(int argc, char* argv[]) {
 	parse_input_directory(argv[3]);
 
 	if (feature_type == "antibody") {
-		detect_totalseq_type(extra_info);
+		if (barcode_pos < 0) detect_totalseq_type(); // if specify --barcode-pos, must be a customized assay
 	} else {
 		if (feature_type != "crispr") {
 			printf("Do not support unknown feature type %s!\n", feature_type.c_str());
 			exit(-1);
 		}
-		if (extra_info == "")
-			printf("Scaffold sequence is not provided. Assume that barcode starts at position 0 of read 2.\n");
+		if (barcode_pos < 0) barcode_pos = 0; // default is 0
 	}
 
 	printf("Load cell barcodes.\n");
-	convert_cell_barcode = convert_cell_barcode || (feature_type == "antibody" && extra_info == "TotalSeq-B") || (feature_type == "crispr" && umi_len == 12);
+	convert_cell_barcode = convert_cell_barcode || (feature_type == "antibody" && totalseq_type == "TotalSeq-B") || (feature_type == "crispr" && umi_len == 12);
 	parse_sample_sheet(argv[1], n_cell, cell_blen, cell_index, cell_names, max_mismatch_cell, convert_cell_barcode);
-	printf("Time spent on parsing cell barcodes = %.2fs.\n", difftime(time(NULL), a));
+	printf("Time spent on parsing cell barcodes = %.2fs.\n", difftime(time(NULL), start_time));
 
 	int cnt = 0;
 	string cell_barcode, umi, feature_barcode;
@@ -381,7 +368,7 @@ int main(int argc, char* argv[]) {
 			cell_iter = cell_index.find(binary_cell);
 
 			if (cell_iter != cell_index.end() && cell_iter->second.item_id >= 0) {
-				if (extract_feature_barcode(read2.seq, feature_blen, feature_type, extra_info, feature_barcode)) {
+				if (extract_feature_barcode(read2.seq, feature_blen, feature_type, feature_barcode)) {
 					binary_feature = barcode_to_binary(feature_barcode);
 					feature_iter = feature_index.find(binary_feature);
 					if (feature_iter != feature_index.end() && feature_iter->second.item_id >= 0) {
@@ -418,8 +405,9 @@ int main(int argc, char* argv[]) {
 			dataCollectors[i].output(output_name + "." + cat_names[i], feature_type, cat_nfs[i], cat_nfs[i + 1], cell_names, umi_len, feature_names);
 		}
 
-	b = time(NULL);
-	printf("Time spent = %.2fs.\n", difftime(b, a));
+	end_time = time(NULL);
+	printf("Time spent = %.2fs.\n", difftime(end_time, start_time));
 
 	return 0;
 }
+
