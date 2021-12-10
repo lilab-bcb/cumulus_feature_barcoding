@@ -17,9 +17,8 @@
 
 using namespace std;
 
-const int STRLEN = 1005;
-const string TSO = "AAGCAGTGGTATCAACGCAGAGTACATGGG"; // For Perturb-seq
 
+const int STRLEN = 1005;
 
 const int totalseq_A_pos = 0;
 const int totalseq_BC_pos = 10;
@@ -109,17 +108,6 @@ void parse_input_directory(char* input_dirs) {
 	}
 }
 
-// // valdiate the BA...A pattern
-// // lenA, length of A string
-// inline bool validate_pattern_antibody(const string& tag, int pos, int lenA, int max_mismatch) {
-// 	int nmis = (tag[pos] != 'C' && tag[pos] != 'G' && tag[pos] != 'T');
-// 	++pos;
-// 	for (int i = 0; i < lenA; ++i, ++pos) {
-// 		nmis += (tag[pos] != 'A');
-// 		if (nmis > max_mismatch) return false;
-// 	}
-// 	return true;
-// }
 
 // return rightmost position + 1
 inline int matching(const string& readseq, const string& pattern, int nmax_mis, int pos, int& best_value) {
@@ -155,6 +143,7 @@ inline int matching(const string& readseq, const string& pattern, int nmax_mis, 
 
 	return best_value <= nmax_mis ? pos + i + (best_j - nmax_mis) : -1;
 }
+
 
 // [start, end]
 inline int locate_scaffold_sequence(const string& sequence, const string& scaffold, int start, int end, int max_mismatch) {
@@ -193,7 +182,7 @@ inline bool extract_feature_barcode(const string& sequence, int feature_length, 
 		feature_barcode = safe_substr(sequence, barcode_pos, feature_length);
 	else {
 		// With scaffold sequence, locate it first
-		start_pos = 0; // temporarily disable TSO matching
+		start_pos = 0; 
 		end_pos = locate_scaffold_sequence(sequence, scaffold_sequence, start_pos + feature_length - max_mismatch_feature, sequence.length() - (scaffold_sequence.length() - 2), 2);
 		success = end_pos >= 0;
 		if (success) {
@@ -285,8 +274,8 @@ int main(int argc, char* argv[]) {
 		printf("\t--max-mismatch-feature #\tmaximum number of mismatches allowed for feature barcodes [default: 3]\n");
 		printf("\t--umi-length len\tlength of the UMI sequence [default: 10]\n");
 		printf("\t--barcode-pos #\tstart position of barcode in read 2, 0-based coordinate [default: automatically determined for antibody; 0 for crispr].\n");
-		printf("\t--convert-cell-barcode\tconvert cell barcode to match RNA cell barcodes for 10x Genomics' data\n");
-		printf("\t--scaffold-sequence sequence\tscaffold sequence used to locate the protospacer for sgRNA. If this option is not set for crispr data, assume barcode starts at position 0 of read 2.\n");
+		printf("\t--convert-cell-barcode\tconvert cell barcode to match RNA cell barcodes for 10x Genomics' data. Note that both cmo and 10x crispr need to set this option to convert feature barcoding barcodes to RNA barcodes. When data is hashing/CITE-Seq, this option will be automatically turned on for TotalSeq-B antibodies.\n");
+		printf("\t--scaffold-sequence sequence\tscaffold sequence used to locate the protospacer for sgRNA. This option is only used for crispr data. If --barcode-pos is not set and this option is set, try to locate barcode in front of the specified scaffold sequence.\n");
 		printf("Outputs:\n\toutput_name.csv\tfeature-cell count matrix. First row: [Antibody/CRISPR],barcode_1,...,barcode_n;Other rows: feature_name,feature_count_1,...,feature_count_n\n");
 		printf("\toutput_name.stat.csv.gz\tgzipped sufficient statistics file. First row: Barcode,UMI,Feature,Count; Other rows: each row describe the read count for one barcode-umi-feature combination\n\n");
 		printf("\tIf feature_category presents, this program will output the above two files for each feature_category. For example, if feature_category is hashing, output_name.hashing.csv and output_name.hashing.stat.csv.gz will be generated.\n");
@@ -345,7 +334,7 @@ int main(int argc, char* argv[]) {
 	}
 
 	printf("Load cell barcodes.\n");
-	convert_cell_barcode = convert_cell_barcode || (feature_type == "antibody" && totalseq_type == "TotalSeq-B") || (feature_type == "crispr" && umi_len == 12);
+	convert_cell_barcode = convert_cell_barcode || (feature_type == "antibody" && totalseq_type == "TotalSeq-B");
 	parse_sample_sheet(argv[1], n_cell, cell_blen, cell_index, cell_names, max_mismatch_cell, convert_cell_barcode);
 	printf("Time spent on parsing cell barcodes = %.2fs.\n", difftime(time(NULL), start_time));
 
@@ -410,4 +399,3 @@ int main(int argc, char* argv[]) {
 
 	return 0;
 }
-
