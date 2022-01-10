@@ -37,17 +37,17 @@ to see its usage.
 
 ### Compile on Mac OS
 
-1. Install boost
+1. Install boost using homebrew
 
 ```
-conda install -c conda-forge boost
+brew install boost
 ```
 
 2. Set up environment variables
 
 ```
-export CPATH=/opt/miniconda3/envs/your_env/include
-export LIBRARY_PATH=/opt/miniconda3/envs/your_env/lib
+export CPATH=/usr/local/opt/boost/include
+export LIBRARY_PATH=/usr/local/opt/boost/lib
 ```
 
 3. Compile
@@ -58,3 +58,4 @@ make all
 ```
 
 ## Usage
+
