@@ -33,14 +33,15 @@ def generate_umi_count_plot(count_vec, count_threshold, output_file):
 	background = plt.bar(count_vec.index[~idx], count_vec.values[~idx], linewidth = 0, color = 'blue')
 	signal = plt.bar(count_vec.index[idx], count_vec.values[idx], linewidth = 0, color = 'red')
 	plt.legend([background, signal], ["background", "signal"], loc = 'upper right')
-	plt.xlim(0, count_vec.index.max() + 1)
+	plt.xlim(0, min(count_vec.index.max() + 1, 50))
 	plt.xlabel('UMI with certain number of reads')
 	plt.ylabel('Number of UMIs')
 	plt.savefig(output_file, dpi = 500)
 	plt.close()
 
 def load_feature_names(feature_file):
-	return pd.read_csv(feature_file, header = None, index_col = 0, squeeze = True).values
+	df = pd.read_csv(feature_file, header = None, index_col = 0)
+	return df[df.columns[0]].values
 
 def write_csv(new_barcodes, feature_names, tot_umis, output_file):
 	with open(output_file, 'w') as fout:
