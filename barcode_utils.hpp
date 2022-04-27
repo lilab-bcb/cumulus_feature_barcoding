@@ -73,7 +73,7 @@ uint64_t barcode_to_binary(const std::string& barcode) {
 	}
 	for (auto&& it = barcode.rbegin(); it != barcode.rend(); ++it) {
 		c = *it;
-		if (base2id[c] < 0) { 
+		if (base2id[c] < 0) {
 			printf("Barcode %s contains unknown bases %c!\n", barcode.c_str(), c);
 			exit(-1);
 		}
@@ -151,10 +151,10 @@ void parse_sample_sheet(const char* sample_sheet_file, int& n_barcodes, int& bar
 
 		if (pos != std::string::npos) { index_seq = line.substr(0, pos); index_name = line.substr(pos + 1); }
 		else { index_seq = line; index_name = line; }
-		
+
 		if (barcode_len == 0) barcode_len = index_seq.length();
 		else assert(barcode_len == index_seq.length());
-		
+
 		if (convert_cell_barcode) {
 			pos = barcode_len / 2 - 1;
 			index_seq[pos] = base2rcbase[index_seq[pos]];
@@ -164,7 +164,7 @@ void parse_sample_sheet(const char* sample_sheet_file, int& n_barcodes, int& bar
 
 		if (max_mismatch == 1) mutate_index_one_mismatch(index_dict, index_seq, n_barcodes);
 		else mutate_index(index_dict, barcode_to_binary(index_seq), index_seq.length(), n_barcodes, max_mismatch, 0, 0);
-		
+
 		index_names.push_back(index_name);
 		++n_barcodes;
 	}
@@ -172,9 +172,9 @@ void parse_sample_sheet(const char* sample_sheet_file, int& n_barcodes, int& bar
 	printf("%s is parsed. n_barcodes = %d, and barcode_len = %d.\n", sample_sheet_file, n_barcodes, barcode_len);
 
 	int n_amb = 0;
-	for (auto&& kv : index_dict) 
+	for (auto&& kv : index_dict)
 		if (kv.second.item_id < 0) ++n_amb;
 	printf("In the index, %d out of %d items are ambigious, percentage = %.2f%%.\n", n_amb, (int)index_dict.size(), n_amb * 100.0 / index_dict.size());
 }
 
-#endif 
+#endif

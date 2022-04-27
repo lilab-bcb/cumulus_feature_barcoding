@@ -19,12 +19,10 @@
 using namespace std;
 
 
-const int STRLEN = 1005;
-
 const int totalseq_A_pos = 0;
 const int totalseq_BC_pos = 10;
 
-struct InputFile{
+struct InputFile {
 	string input_r1, input_r2;
 
 	InputFile(string r1, string r2) : input_r1(r1), input_r2(r2) {}
@@ -37,10 +35,9 @@ bool convert_cell_barcode;
 
 time_t start_time, end_time;
 
-vector<InputFile> inputs; 
+vector<InputFile> inputs;
 
 Read read1, read2;
-iGZipFile gzip_in_r1, gzip_in_r2;
 
 int n_cell, n_feature; // number of cell and feature barcodes
 int cell_blen, feature_blen; // cell barcode length and feature barcode length
@@ -50,12 +47,10 @@ HashIterType cell_iter, feature_iter;
 
 int f[2][7]; // for banded dynamic programming, max allowed mismatch = 3
 
-
 int n_cat; // number of feature categories (e.g. hashing, citeseq)
 vector<string> cat_names; // category names
 vector<int> cat_nfs, feature_categories; // cat_nfs, number of features in each category; int representing categories.
 vector<DataCollector> dataCollectors;
-
 
 
 void parse_input_directory(char* input_dirs) {
@@ -68,11 +63,11 @@ void parse_input_directory(char* input_dirs) {
 	string dir_name;
 
 	char *input_dir = strtok(input_dirs, ",");
-	
+
 	inputs.clear();
 	while (input_dir != NULL) {
 		assert((dir = opendir(input_dir)) != NULL);
-		
+
 		dir_name = string(input_dir) + "/";
 
 		mate1s.clear();
@@ -141,7 +136,6 @@ inline int matching(const string& readseq, const string& pattern, int nmax_mis, 
 		if (best_value > nmax_mis) break;
 		prev = curr; curr ^= 1;
 	}
-
 	return best_value <= nmax_mis ? pos + i + (best_j - nmax_mis) : -1;
 }
 
@@ -169,7 +163,7 @@ inline int locate_scaffold_sequence(const string& sequence, const string& scaffo
 inline string safe_substr(const string& sequence, int pos, int length) {
 	if (pos + length > sequence.length()) {
 		printf("Error: Sequence length %d is too short (expected to be at least %d)!\n", (int)sequence.length(), pos + length);
-		exit(-1);		
+		exit(-1);
 	}
 	return sequence.substr(pos, length);
 }
@@ -177,25 +171,25 @@ inline string safe_substr(const string& sequence, int pos, int length) {
 
 inline bool extract_feature_barcode(const string& sequence, int feature_length, const string& feature_type, string& feature_barcode) {
 	bool success = true;
-	int start_pos, end_pos, best_value; // here start_pos and end_pos are with respect to feature sequence.
+	int start_pos, end_pos; // here start_pos and end_pos are with respect to feature sequence.
 
 	if (feature_type == "antibody" || scaffold_sequence == "")
 		feature_barcode = safe_substr(sequence, barcode_pos, feature_length);
 	else {
 		// With scaffold sequence, locate it first
-		start_pos = 0; 
+		start_pos = 0;
 		end_pos = locate_scaffold_sequence(sequence, scaffold_sequence, start_pos + feature_length - max_mismatch_feature, sequence.length() - (scaffold_sequence.length() - 2), 2);
 		success = end_pos >= 0;
 		if (success) {
-			if (end_pos - start_pos >= feature_length) 
+			if (end_pos - start_pos >= feature_length)
 				feature_barcode = safe_substr(sequence, end_pos - feature_length, feature_length);
-			else 
+			else
 				feature_barcode = string(feature_length - (end_pos - start_pos), 'N') + safe_substr(sequence, start_pos, end_pos - start_pos);
 		}
 	}
-
 	return success;
 }
+
 
 void detect_totalseq_type() {
 	const int nskim = 10000; // Look at first 10000 reads.
@@ -204,7 +198,7 @@ void detect_totalseq_type() {
 
 	cnt = ntotA = ntotBC = 0;
 	for (auto&& input_fastq : inputs) {
-		gzip_in_r2.open(input_fastq.input_r2.c_str());
+		iGZipFile gzip_in_r2(input_fastq.input_r2);
 		while (gzip_in_r2.next(read2) == 4 && cnt < nskim) {
 			binary_feature = barcode_to_binary(safe_substr(read2.seq, totalseq_A_pos, feature_blen));
 			feature_iter = feature_index.find(binary_feature);
@@ -213,13 +207,10 @@ void detect_totalseq_type() {
 			if (read2.seq.length() >= totalseq_BC_pos + feature_blen) {
 				binary_feature = barcode_to_binary(safe_substr(read2.seq, totalseq_BC_pos, feature_blen));
 				feature_iter = feature_index.find(binary_feature);
-				ntotBC += (feature_iter != feature_index.end() && feature_iter->second.item_id >= 0);				
+				ntotBC += (feature_iter != feature_index.end() && feature_iter->second.item_id >= 0);
 			}
-
 			++cnt;
 		}
-		gzip_in_r2.close();
-
 		if (cnt == nskim) break;
 	}
 
@@ -244,7 +235,7 @@ void parse_feature_names(int n_feature, vector<string>& feature_names, int& n_ca
 	pos = feature_names[0].find_first_of(',');
 	if (pos != string::npos) {
 		cat_names.clear();
-		cat_nfs.clear();		
+		cat_nfs.clear();
 		feature_categories.resize(n_feature, 0);
 		for (int i = 0; i < n_feature; ++i) {
 			pos = feature_names[i].find_first_of(',');
@@ -327,7 +318,8 @@ int main(int argc, char* argv[]) {
 
 	if (feature_type == "antibody") {
 		if (barcode_pos < 0) detect_totalseq_type(); // if specify --barcode-pos, must be a customized assay
-	} else {
+	}
+    else {
 		if (feature_type != "crispr") {
 			printf("Do not support unknown feature type %s!\n", feature_type.c_str());
 			exit(-1);
@@ -349,11 +341,11 @@ int main(int argc, char* argv[]) {
 	dataCollectors.resize(n_cat > 0 ? n_cat : 1);
 
 	for (auto&& input_fastq : inputs) {
-		gzip_in_r1.open(input_fastq.input_r1.c_str());
-		gzip_in_r2.open(input_fastq.input_r2.c_str());
+		iGZipFile gzip_in_r1(input_fastq.input_r1);
+		iGZipFile gzip_in_r2(input_fastq.input_r2);
 		while (gzip_in_r1.next(read1) == 4 && gzip_in_r2.next(read2) == 4) {
 			++cnt;
-			
+
 			cell_barcode = safe_substr(read1.seq, 0, cell_blen);
 			binary_cell = barcode_to_binary(cell_barcode);
 			cell_iter = cell_index.find(binary_cell);
@@ -377,12 +369,8 @@ int main(int argc, char* argv[]) {
 					}
 				}
 			}
-
 			if (cnt % 1000000 == 0) printf("Processed %d reads.\n", cnt);
 		}
-
-		gzip_in_r1.close();
-		gzip_in_r2.close();		
 	}
 
 	printf("Parsing input data is finished.\n");
@@ -396,7 +384,7 @@ int main(int argc, char* argv[]) {
 
 	if (n_cat == 0)
 		n_valid = dataCollectors[0].output(output_name, feature_type, 0, n_feature, cell_names, umi_len, feature_names, fout);
-	else 
+	else
 		for (int i = 0; i < n_cat; ++i) {
 			printf("Feature '%s':\n", cat_names[i].c_str());
 			n_valid += dataCollectors[i].output(output_name + "." + cat_names[i], feature_type, cat_nfs[i], cat_nfs[i + 1], cell_names, umi_len, feature_names, fout);
