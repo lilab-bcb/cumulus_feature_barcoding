@@ -343,8 +343,8 @@ int main(int argc, char* argv[]) {
 	dataCollectors.resize(n_cat > 0 ? n_cat : 1);
 
 	for (auto&& input_fastq : inputs) {
-		iGZipFile gzip_in_r1(input_fastq.input_r1.c_str());
-		iGZipFile gzip_in_r2(input_fastq.input_r2.c_str());
+		iGZipFile gzip_in_r1(input_fastq.input_r1);
+		iGZipFile gzip_in_r2(input_fastq.input_r2);
 		while (gzip_in_r1.next(read1) == 4 && gzip_in_r2.next(read2) == 4) {
 			++cnt;
 
