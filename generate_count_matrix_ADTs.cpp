@@ -19,8 +19,6 @@
 using namespace std;
 
 
-const int STRLEN = 1005;
-
 const int totalseq_A_pos = 0;
 const int totalseq_BC_pos = 10;
 
@@ -173,7 +171,7 @@ inline string safe_substr(const string& sequence, int pos, int length) {
 
 inline bool extract_feature_barcode(const string& sequence, int feature_length, const string& feature_type, string& feature_barcode) {
 	bool success = true;
-	int start_pos, end_pos, best_value; // here start_pos and end_pos are with respect to feature sequence.
+	int start_pos, end_pos; // here start_pos and end_pos are with respect to feature sequence.
 
 	if (feature_type == "antibody" || scaffold_sequence == "")
 		feature_barcode = safe_substr(sequence, barcode_pos, feature_length);
