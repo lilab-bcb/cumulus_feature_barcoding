@@ -40,7 +40,6 @@ time_t start_time, end_time;
 vector<InputFile> inputs; 
 
 Read read1, read2;
-iGZipFile gzip_in_r1, gzip_in_r2;
 
 int n_cell, n_feature; // number of cell and feature barcodes
 int cell_blen, feature_blen; // cell barcode length and feature barcode length
@@ -204,7 +203,7 @@ void detect_totalseq_type() {
 
 	cnt = ntotA = ntotBC = 0;
 	for (auto&& input_fastq : inputs) {
-		gzip_in_r2.open(input_fastq.input_r2.c_str());
+		iGZipFile gzip_in_r2(input_fastq.input_r2);
 		while (gzip_in_r2.next(read2) == 4 && cnt < nskim) {
 			binary_feature = barcode_to_binary(safe_substr(read2.seq, totalseq_A_pos, feature_blen));
 			feature_iter = feature_index.find(binary_feature);
@@ -215,11 +214,8 @@ void detect_totalseq_type() {
 				feature_iter = feature_index.find(binary_feature);
 				ntotBC += (feature_iter != feature_index.end() && feature_iter->second.item_id >= 0);				
 			}
-
 			++cnt;
 		}
-		gzip_in_r2.close();
-
 		if (cnt == nskim) break;
 	}
 
@@ -349,8 +345,8 @@ int main(int argc, char* argv[]) {
 	dataCollectors.resize(n_cat > 0 ? n_cat : 1);
 
 	for (auto&& input_fastq : inputs) {
-		gzip_in_r1.open(input_fastq.input_r1.c_str());
-		gzip_in_r2.open(input_fastq.input_r2.c_str());
+		iGZipFile gzip_in_r1(input_fastq.input_r1.c_str());
+		iGZipFile gzip_in_r2(input_fastq.input_r2.c_str());
 		while (gzip_in_r1.next(read1) == 4 && gzip_in_r2.next(read2) == 4) {
 			++cnt;
 			
@@ -380,9 +376,6 @@ int main(int argc, char* argv[]) {
 
 			if (cnt % 1000000 == 0) printf("Processed %d reads.\n", cnt);
 		}
-
-		gzip_in_r1.close();
-		gzip_in_r2.close();		
 	}
 
 	printf("Parsing input data is finished.\n");
