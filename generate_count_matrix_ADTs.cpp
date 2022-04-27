@@ -373,7 +373,6 @@ int main(int argc, char* argv[]) {
 					}
 				}
 			}
-
 			if (cnt % 1000000 == 0) printf("Processed %d reads.\n", cnt);
 		}
 	}
