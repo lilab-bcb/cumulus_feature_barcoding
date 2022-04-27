@@ -49,12 +49,10 @@ HashIterType cell_iter, feature_iter;
 
 int f[2][7]; // for banded dynamic programming, max allowed mismatch = 3
 
-
 int n_cat; // number of feature categories (e.g. hashing, citeseq)
 vector<string> cat_names; // category names
 vector<int> cat_nfs, feature_categories; // cat_nfs, number of features in each category; int representing categories.
 vector<DataCollector> dataCollectors;
-
 
 
 void parse_input_directory(char* input_dirs) {
