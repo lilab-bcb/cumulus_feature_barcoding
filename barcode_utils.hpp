@@ -9,8 +9,6 @@
 #include <vector>
 #include <unordered_map>
 
-#include "gzip_utils.hpp"
-
 struct ValueType {
 	int item_id;
 	char n_mis; // number of mismatches
@@ -117,10 +115,11 @@ inline void mutate_index_one_mismatch(HashType& index_dict, std::string& barcode
 	insert(index_dict, binary_id, ValueType(item_id, 0));
 	for (int i = 0; i < len; ++i) {
 		uint64_t val = binary_id & aux_arr[i][NNUC];
-		for (int j = 0; j < NNUC; ++j)
+		for (int j = 0; j < NNUC; ++j) {
 			if (val != aux_arr[i][j]) {
 				insert(index_dict, binary_id - val + aux_arr[i][j], ValueType(item_id, 1));
 			}
+		}
 	}
 }
 
@@ -130,15 +129,16 @@ inline void mutate_index(HashType& index_dict, uint64_t binary_id, int len, int 
 
 	for (int i = pos; i < len; ++i) {
 		uint64_t val = binary_id & aux_arr[i][NNUC];
-		for (int j = 0; j < NNUC; ++j)
+		for (int j = 0; j < NNUC; ++j) {
 			if (val != aux_arr[i][j]) {
 				mutate_index(index_dict, binary_id - val + aux_arr[i][j], len, item_id, max_mismatch, mismatch + 1, i + 1);
 			}
+		}
 	}
 }
 
 void parse_sample_sheet(const char* sample_sheet_file, int& n_barcodes, int& barcode_len, HashType& index_dict, std::vector<std::string>& index_names, int max_mismatch = 1, bool convert_cell_barcode = false) {
-	iGZipFile fin(sample_sheet_file);
+	std::ifstream fin(sample_sheet_file);
 	std::string line, index_name, index_seq;
 	std::size_t pos;
 
@@ -146,7 +146,7 @@ void parse_sample_sheet(const char* sample_sheet_file, int& n_barcodes, int& bar
 	barcode_len = 0;
 	index_dict.clear();
 	index_names.clear();
-	while (fin.getline(line)) {
+	while (std::getline(fin, line)) {
 		if (line.empty()) continue;
 
 		pos = line.find_first_of(',');
@@ -170,13 +170,12 @@ void parse_sample_sheet(const char* sample_sheet_file, int& n_barcodes, int& bar
 		index_names.push_back(index_name);
 		++n_barcodes;
 	}
-	fin.close();
 	printf("%s is parsed. n_barcodes = %d, and barcode_len = %d.\n", sample_sheet_file, n_barcodes, barcode_len);
 
 	int n_amb = 0;
 	for (auto&& kv : index_dict) 
 		if (kv.second.item_id < 0) ++n_amb;
-	printf("In the index, %d out of %d items are ambigious, ratio = %.2f.\n", n_amb, (int)index_dict.size(), n_amb * 1.0 / index_dict.size());
+	printf("In the index, %d out of %d items are ambigious, percentage = %.2f%%.\n", n_amb, (int)index_dict.size(), n_amb * 100.0 / index_dict.size());
 }
 
 #endif 
