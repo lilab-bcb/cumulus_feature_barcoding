@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 #include <fstream>
+#include <iomanip>
 #include <algorithm>
 
 #include "dirent.h"
@@ -264,11 +265,11 @@ void parse_feature_names(int n_feature, vector<string>& feature_names, int& n_ca
 
 int main(int argc, char* argv[]) {
 	if (argc < 5) {
-		printf("Usage: generate_count_matrix_ADTs cell_barcodes.txt[.gz] feature_barcodes.csv fastq_folders output_name [--max-mismatch-cell #] [--feature feature_type] [--max-mismatch-feature #] [--umi-length len] [--barcode-pos #] [--convert-cell-barcode] [--scaffold-sequence sequence]\n");
-		printf("Arguments:\n\tcell_barcodes.txt[.gz]\t10x genomics barcode white list\n");
+		printf("Usage: generate_count_matrix_ADTs cell_barcodes.txt feature_barcodes.csv fastq_folders output_name [--max-mismatch-cell #] [--feature feature_type] [--max-mismatch-feature #] [--umi-length len] [--barcode-pos #] [--convert-cell-barcode] [--scaffold-sequence sequence]\n");
+		printf("Arguments:\n\tcell_barcodes.txt\t10x genomics barcode white list\n");
 		printf("\tfeature_barcodes.csv\tfeature barcode file;barcode,feature_name[,feature_category]. Optional feature_category is required only if hashing and citeseq data share the same sample index\n");
 		printf("\tfastq_folders\tfolder contain all R1 and R2 FASTQ files ending with 001.fastq.gz\n");
-		printf("\toutput_name\toutput file name prefix;output_name.csv and output_name.stat.csv\n");
+		printf("\toutput_name\toutput file name prefix\n");
 		printf("Options:\n\t--max-mismatch-cell #\tmaximum number of mismatches allowed for cell barcodes [default: 1]\n");
 		printf("\t--feature feature_type\tfeature type can be either antibody or crispr [default: antibody]\n");
 		printf("\t--max-mismatch-feature #\tmaximum number of mismatches allowed for feature barcodes [default: 3]\n");
@@ -277,8 +278,9 @@ int main(int argc, char* argv[]) {
 		printf("\t--convert-cell-barcode\tconvert cell barcode to match RNA cell barcodes for 10x Genomics' data. Note that both cmo and 10x crispr need to set this option to convert feature barcoding barcodes to RNA barcodes. When data is hashing/CITE-Seq, this option will be automatically turned on for TotalSeq-B antibodies.\n");
 		printf("\t--scaffold-sequence sequence\tscaffold sequence used to locate the protospacer for sgRNA. This option is only used for crispr data. If --barcode-pos is not set and this option is set, try to locate barcode in front of the specified scaffold sequence.\n");
 		printf("Outputs:\n\toutput_name.csv\tfeature-cell count matrix. First row: [Antibody/CRISPR],barcode_1,...,barcode_n;Other rows: feature_name,feature_count_1,...,feature_count_n\n");
-		printf("\toutput_name.stat.csv.gz\tgzipped sufficient statistics file. First row: Barcode,UMI,Feature,Count; Other rows: each row describe the read count for one barcode-umi-feature combination\n\n");
+		printf("\toutput_name.stat.csv\tSufficient statistics file. First row: Barcode,UMI,Feature,Count; Other rows: each row describe the read count for one barcode-umi-feature combination\n\n");
 		printf("\tIf feature_category presents, this program will output the above two files for each feature_category. For example, if feature_category is hashing, output_name.hashing.csv and output_name.hashing.stat.csv.gz will be generated.\n");
+		printf("\toutput_name.report.txt\tA report file summarizing barcode, UMI and read results.\n");
 		exit(-1);
 	}
 
@@ -386,13 +388,22 @@ int main(int argc, char* argv[]) {
 	printf("Parsing input data is finished.\n");
 
 	string output_name = argv[4];
+
+	int n_valid = 0;
+	ofstream fout;
+	fout.open(output_name + ".report.txt");
+	fout<< "Total number of reads: "<< cnt<< endl<< endl;
+
 	if (n_cat == 0)
-		dataCollectors[0].output(output_name, feature_type, 0, n_feature, cell_names, umi_len, feature_names);
+		n_valid = dataCollectors[0].output(output_name, feature_type, 0, n_feature, cell_names, umi_len, feature_names, fout);
 	else 
 		for (int i = 0; i < n_cat; ++i) {
 			printf("Feature '%s':\n", cat_names[i].c_str());
-			dataCollectors[i].output(output_name + "." + cat_names[i], feature_type, cat_nfs[i], cat_nfs[i + 1], cell_names, umi_len, feature_names);
+			n_valid += dataCollectors[i].output(output_name + "." + cat_names[i], feature_type, cat_nfs[i], cat_nfs[i + 1], cell_names, umi_len, feature_names, fout);
 		}
+
+	fout<< "Number of reads with valid cell and feature barcodes: "<< n_valid<< " ("<< fixed<< setprecision(2)<< n_valid * 100.0 / cnt << "%)"<< endl;
+	fout.close();
 
 	end_time = time(NULL);
 	printf("Time spent = %.2fs.\n", difftime(end_time, start_time));
