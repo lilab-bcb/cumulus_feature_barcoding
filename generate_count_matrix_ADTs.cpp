@@ -16,6 +16,8 @@
 #include "barcode_utils.hpp"
 #include "datamatrix_utils.hpp"
 
+#include "FQFeeder/include/FastxParser.hpp"
+
 using namespace std;
 
 
@@ -28,6 +30,18 @@ struct InputFile {
 	InputFile(string r1, string r2) : input_r1(r1), input_r2(r2) {}
 };
 
+struct result_t {
+	int collector_pos;
+	int cell_id;
+	uint64_t umi;
+	int feature_id;
+
+	result_t(int a1, int a2, uint64_t a3, int a4) : collector_pos(a1), cell_id(a2), umi(a3), feature_id(a4) {}
+};
+
+uint32_t nt; // fastx_parser consumer threads
+uint32_t np; // fastx_parser producer threads
+
 int max_mismatch_cell, max_mismatch_feature, umi_len;
 string feature_type, totalseq_type, scaffold_sequence;
 int barcode_pos; // Antibody: Total-Seq A 0; Total-Seq B or C 10. Crispr: default 0, can be set by option
@@ -37,13 +51,10 @@ time_t start_time, end_time;
 
 vector<InputFile> inputs;
 
-Read read1, read2;
-
 int n_cell, n_feature; // number of cell and feature barcodes
 int cell_blen, feature_blen; // cell barcode length and feature barcode length
 vector<string> cell_names, feature_names;
 HashType cell_index, feature_index;
-HashIterType cell_iter, feature_iter;
 
 int f[2][7]; // for banded dynamic programming, max allowed mismatch = 3
 
@@ -196,6 +207,9 @@ void detect_totalseq_type() {
 	int ntotA, ntotBC, cnt;
 	uint64_t binary_feature;
 
+	HashIterType feature_iter;
+	Read read2;
+
 	cnt = ntotA = ntotBC = 0;
 	for (auto&& input_fastq : inputs) {
 		iGZipFile gzip_in_r2(input_fastq.input_r2);
@@ -227,7 +241,7 @@ void detect_totalseq_type() {
 
 
 void parse_feature_names(int n_feature, vector<string>& feature_names, int& n_cat, vector<string>& cat_names, vector<int>& cat_nfs, vector<int>& feature_categories) {
-	std::size_t pos;
+	size_t pos;
 	string cat_str;
 
 	n_cat = 0;
@@ -268,6 +282,9 @@ int main(int argc, char* argv[]) {
 		printf("\t--barcode-pos #\tstart position of barcode in read 2, 0-based coordinate [default: automatically determined for antibody; 0 for crispr].\n");
 		printf("\t--convert-cell-barcode\tconvert cell barcode to match RNA cell barcodes for 10x Genomics' data. Note that both cmo and 10x crispr need to set this option to convert feature barcoding barcodes to RNA barcodes. When data is hashing/CITE-Seq, this option will be automatically turned on for TotalSeq-B antibodies.\n");
 		printf("\t--scaffold-sequence sequence\tscaffold sequence used to locate the protospacer for sgRNA. This option is only used for crispr data. If --barcode-pos is not set and this option is set, try to locate barcode in front of the specified scaffold sequence.\n");
+		printf("\t--nt #\tnumber of consumer threads [default: 1]. It only makes sense to spawn multiple producer / parser threads if you're reading from more than one file (or more than one file pair, in paired-end mode), and it doesn't make sense to have more producers than files (file pairs).\n");
+		printf("\t--np #\tnumber of producer threads [default: 1]. It only makes sense to spawn multiple producer / parser threads if you're reading from more than one file (or more than one file pair, in paired-end mode), and it doesn't make sense to have more producers than files (file pairs).\n");
+		printf("\t--scaffold-sequence sequence\tscaffold sequence used to locate the protospacer for sgRNA. This option is only used for crispr data. If --barcode-pos is not set and this option is set, try to locate barcode in front of the specified scaffold sequence.\n");
 		printf("Outputs:\n\toutput_name.csv\tfeature-cell count matrix. First row: [Antibody/CRISPR],barcode_1,...,barcode_n;Other rows: feature_name,feature_count_1,...,feature_count_n\n");
 		printf("\toutput_name.stat.csv\tSufficient statistics file. First row: Barcode,UMI,Feature,Count; Other rows: each row describe the read count for one barcode-umi-feature combination\n\n");
 		printf("\tIf feature_category presents, this program will output the above two files for each feature_category. For example, if feature_category is hashing, output_name.hashing.csv and output_name.hashing.stat.csv.gz will be generated.\n");
@@ -285,6 +302,8 @@ int main(int argc, char* argv[]) {
 	totalseq_type = "";
 	scaffold_sequence = "";
 	convert_cell_barcode = false;
+	nt = 1;
+	np = 1;
 
 	for (int i = 5; i < argc; ++i) {
 		if (!strcmp(argv[i], "--max-mismatch-cell")) {
@@ -307,6 +326,12 @@ int main(int argc, char* argv[]) {
 		}
 		if (!strcmp(argv[i], "--scaffold-sequence")) {
 			scaffold_sequence = argv[i + 1];
+		}
+		if (!strcmp(argv[i], "--nt")) {
+			nt = atoi(argv[i + 1]);
+		}
+		if (!strcmp(argv[i], "--np")) {
+			np = atoi(argv[i + 1]);
 		}
 	}
 
@@ -332,48 +357,79 @@ int main(int argc, char* argv[]) {
 	parse_sample_sheet(argv[1], n_cell, cell_blen, cell_index, cell_names, max_mismatch_cell, convert_cell_barcode);
 	printf("Time spent on parsing cell barcodes = %.2fs.\n", difftime(time(NULL), start_time));
 
-	int cnt = 0;
-	string cell_barcode, umi, feature_barcode;
-	uint64_t binary_cell, binary_umi, binary_feature;
-	int read1_len;
-	int feature_id, collector_pos;
-
 	dataCollectors.resize(n_cat > 0 ? n_cat : 1);
 
+	vector<string> inputs1, inputs2;
 	for (auto&& input_fastq : inputs) {
-		iGZipFile gzip_in_r1(input_fastq.input_r1);
-		iGZipFile gzip_in_r2(input_fastq.input_r2);
-		while (gzip_in_r1.next(read1) == 4 && gzip_in_r2.next(read2) == 4) {
-			++cnt;
+		inputs1.push_back(input_fastq.input_r1);
+		inputs2.push_back(input_fastq.input_r2);
+	}
 
-			cell_barcode = safe_substr(read1.seq, 0, cell_blen);
-			binary_cell = barcode_to_binary(cell_barcode);
-			cell_iter = cell_index.find(binary_cell);
+	fastx_parser::FastxParser<fastx_parser::ReadPair> parser(inputs1, inputs2, nt, np);
+	parser.start();
 
-			if (cell_iter != cell_index.end() && cell_iter->second.item_id >= 0) {
-				if (extract_feature_barcode(read2.seq, feature_blen, feature_type, feature_barcode)) {
-					binary_feature = barcode_to_binary(feature_barcode);
-					feature_iter = feature_index.find(binary_feature);
-					if (feature_iter != feature_index.end() && feature_iter->second.item_id >= 0) {
-						read1_len = read1.seq.length();
-						if (read1_len < cell_blen + umi_len) {
-							printf("Warning: Detected read1 length %d is smaller than cell barcode length %d + UMI length %d. Shorten UMI length to %d!\n", read1_len, cell_blen, umi_len, read1_len - cell_blen);
-							umi_len = read1_len - cell_blen;
+	int cnt = 0;
+	mutex work_mutex;
+	vector<thread> readers;
+	for (size_t i = 0; i < nt; ++i) {
+		readers.emplace_back([&, i]() {
+			string cell_barcode, umi, feature_barcode;
+			uint64_t binary_cell, binary_umi, binary_feature;
+			int read1_len;
+			int feature_id, collector_pos;
+
+			HashIterType cell_iter, feature_iter;
+			vector<result_t> results;
+
+			int thread_read_cnt = 0;
+			auto rg = parser.getReadGroup();
+			while (parser.refill(rg)) {
+				for (auto& seqPair : rg) {
+					auto& read1 = seqPair.first;
+					auto& read2 = seqPair.second;
+					++thread_read_cnt;
+
+					cell_barcode = safe_substr(read1.seq, 0, cell_blen);
+					binary_cell = barcode_to_binary(cell_barcode);
+					cell_iter = cell_index.find(binary_cell);
+
+					if (cell_iter != cell_index.end() && cell_iter->second.item_id >= 0) {
+						if (extract_feature_barcode(read2.seq, feature_blen, feature_type, feature_barcode)) {
+							binary_feature = barcode_to_binary(feature_barcode);
+							feature_iter = feature_index.find(binary_feature);
+							if (feature_iter != feature_index.end() && feature_iter->second.item_id >= 0) {
+								read1_len = read1.seq.length();
+								if (read1_len < cell_blen + umi_len) {
+									printf("Warning: Detected read1 length %d is smaller than cell barcode length %d + UMI length %d. Shorten UMI length to %d!\n", read1_len, cell_blen, umi_len, read1_len - cell_blen);
+									umi_len = read1_len - cell_blen;
+								}
+								umi = safe_substr(read1.seq, cell_blen, umi_len);
+								binary_umi = barcode_to_binary(umi);
+
+								feature_id = feature_iter->second.item_id;
+								collector_pos = n_cat > 0 ? feature_categories[feature_id] : 0;
+
+								results.emplace_back(collector_pos, cell_iter->second.item_id, binary_umi, feature_id);
+							}
 						}
-						umi = safe_substr(read1.seq, cell_blen, umi_len);
-						binary_umi = barcode_to_binary(umi);
-
-						feature_id = feature_iter->second.item_id;
-						collector_pos = n_cat > 0 ? feature_categories[feature_id] : 0;
-						dataCollectors[collector_pos].insert(cell_iter->second.item_id, binary_umi, feature_id);
 					}
 				}
 			}
-			if (cnt % 1000000 == 0) printf("Processed %d reads.\n", cnt);
-		}
+			work_mutex.lock();
+			for (result_t& r : results) {
+				dataCollectors[r.collector_pos].insert(r.cell_id, r.umi, r.feature_id);
+			}
+			cnt += thread_read_cnt;
+			printf("Thread %zu processed %d reads. Total %d.\n", i, thread_read_cnt, cnt);
+			work_mutex.unlock();
+		});
 	}
+	for (auto& t : readers) {
+		t.join();
+	}
+	parser.stop();
 
-	printf("Parsing input data is finished.\n");
+	printf("Parsing input data is finished = %.2fs.\n", difftime(time(NULL), start_time));
 
 	string output_name = argv[4];
 
