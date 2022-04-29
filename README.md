@@ -6,55 +6,54 @@ A fast C++ tool to extract feature-count matrix from sequence reads in FASTQ fil
 
 ## Installation
 
-The installation has been tested on Debian and Ubuntu Linux.
+The installation has been tested on Linux and MacOS.
 
 1. Install dependency packages:
 
+On MacOS:
+
 ```
-sudo apt install build-essential git libboost-iostreams-dev
+brew install cmake git
 ```
 
-2. Check out this repository via Git:
+On Debian or Ubuntu Linux:
+
+```
+sudo apt install build-essential git
+```
+
+2. Install dependency packages:
 
 ```
 git clone https://github.com/lilab-bcb/cumulus_feature_barcoding.git
 ```
 
-3. Enter the directory and compile:
+3. Enter the directory:
 
 ```
 cd cumulus_feature_barcoding
-make all
 ```
 
-4. Now you'll have an executable named ``generate_count_matrix_ADTs`` inside your folder. Type
+4. Download FQFeeder:
 
 ```
-./generate_count_matrix_ADTs
+git clone https://github.com/rob-p/FQFeeder.git
+```
+
+5. Compile:
+
+```
+mkdir build
+cmake ..
+```
+
+6. Now you'll have an executable named ``generate_count_matrix_ADTs`` inside your build folder. Type
+
+```
+./build/generate_count_matrix_ADTs
 ```
 
 to see its usage.
 
-### Compile on Mac OS
-
-1. Install boost using homebrew
-
-```
-brew install boost
-```
-
-2. Set up environment variables
-
-```
-export CPATH=/usr/local/opt/boost/include
-export LIBRARY_PATH=/usr/local/opt/boost/lib
-```
-
-3. Compile
-
-```
-cd cumulus_feature_barcoding
-make all
-```
 
 ## Usage

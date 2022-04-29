@@ -16,7 +16,7 @@
 #include "barcode_utils.hpp"
 #include "datamatrix_utils.hpp"
 
-#include "FQFeeder/include/FastxParser.hpp"
+#include "FastxParser.hpp"
 
 using namespace std;
 
