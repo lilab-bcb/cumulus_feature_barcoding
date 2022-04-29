@@ -44,6 +44,7 @@ git clone https://github.com/rob-p/FQFeeder.git
 
 ```
 mkdir build
+cd build
 cmake ..
 ```
 
