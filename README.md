@@ -6,14 +6,14 @@ A fast C++ tool to extract feature-count matrix from sequence reads in FASTQ fil
 
 ## Installation
 
-The installation has been tested on Linux and MacOS.
+The installation has been tested on Ubuntu (gcc >= 9.4.0, zlib >= 1.2.11, glibc >= 2.31) and MacOS (clang >= 12.0.0, zlib >= 1.2.12).
 
 1. Install dependency packages:
 
 On MacOS:
 
 ```
-brew install cmake git
+brew install cmake zlib git
 ```
 
 On Debian or Ubuntu Linux:
