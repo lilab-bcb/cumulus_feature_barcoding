@@ -135,7 +135,7 @@ inline void mutate_index(HashType& index_dict, uint64_t binary_id, int len, int 
 	}
 }
 
-void parse_sample_sheet(const char* sample_sheet_file, int& n_barcodes, int& barcode_len, HashType& index_dict, std::vector<std::string>& index_names, int max_mismatch = 1, bool convert_cell_barcode = false) {
+void parse_sample_sheet(const char* sample_sheet_file, int& n_barcodes, size_t& barcode_len, HashType& index_dict, std::vector<std::string>& index_names, int max_mismatch = 1, bool convert_cell_barcode = false) {
 	std::ifstream fin(sample_sheet_file);
 	std::string line, index_name, index_seq;
 	std::size_t pos;
@@ -169,7 +169,7 @@ void parse_sample_sheet(const char* sample_sheet_file, int& n_barcodes, int& bar
 		++n_barcodes;
 	}
 	fin.close();
-	printf("%s is parsed. n_barcodes = %d, and barcode_len = %d.\n", sample_sheet_file, n_barcodes, barcode_len);
+	printf("%s is parsed. n_barcodes = %d, and barcode_len = %zu.\n", sample_sheet_file, n_barcodes, barcode_len);
 
 	int n_amb = 0;
 	for (auto&& kv : index_dict)

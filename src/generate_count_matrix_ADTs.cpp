@@ -42,7 +42,8 @@ struct result_t {
 uint32_t nt; // fastx_parser consumer threads
 uint32_t np; // fastx_parser producer threads
 
-int max_mismatch_cell, max_mismatch_feature, umi_len;
+int max_mismatch_cell, max_mismatch_feature;
+size_t umi_len;
 string feature_type, totalseq_type, scaffold_sequence;
 int barcode_pos; // Antibody: Total-Seq A 0; Total-Seq B or C 10. Crispr: default 0, can be set by option
 bool convert_cell_barcode;
@@ -52,7 +53,7 @@ time_t start_time, end_time;
 vector<InputFile> inputs;
 
 int n_cell, n_feature; // number of cell and feature barcodes
-int cell_blen, feature_blen; // cell barcode length and feature barcode length
+size_t cell_blen, feature_blen; // cell barcode length and feature barcode length
 vector<string> cell_names, feature_names;
 HashType cell_index, feature_index;
 
@@ -101,13 +102,13 @@ void parse_input_directory(char* input_dirs) {
 			}
 		}
 
-		int s = mate1s.size();
+		size_t s = mate1s.size();
 
 		assert(s == mate2s.size());
 		sort(mate1s.begin(), mate1s.end());
 		sort(mate2s.begin(), mate2s.end());
 
-		for (int i = 0; i < s; ++i) {
+		for (size_t i = 0; i < s; ++i) {
 			inputs.emplace_back(dir_name + mate1s[i], dir_name + mate2s[i]);
 		}
 
@@ -132,6 +133,7 @@ inline int matching(const string& readseq, const string& pattern, int nmax_mis, 
 	// Dynamic Programming
 	prev = 1; curr = 0;
 	best_value = 0;
+	best_j = 0;
 	int i;
 	for (i = 0; i < plen; ++i) {
 		best_value = nmax_mis + 1; best_j = -1;
@@ -155,6 +157,7 @@ inline int matching(const string& readseq, const string& pattern, int nmax_mis, 
 inline int locate_scaffold_sequence(const string& sequence, const string& scaffold, int start, int end, int max_mismatch) {
 	int i, pos, best_value, value;
 
+	best_value = 0;
 	for (i = start; i <= end; ++i) {
 		pos = matching(sequence, scaffold, max_mismatch, i, best_value);
 		if (pos >= 0) break;
@@ -171,9 +174,9 @@ inline int locate_scaffold_sequence(const string& sequence, const string& scaffo
 }
 
 
-inline string safe_substr(const string& sequence, int pos, int length) {
+inline string safe_substr(const string& sequence, size_t pos, size_t length) {
 	if (pos + length > sequence.length()) {
-		printf("Error: Sequence length %d is too short (expected to be at least %d)!\n", (int)sequence.length(), pos + length);
+		printf("Error: Sequence length %zu is too short (expected to be at least %zu)!\n", sequence.length(), pos + length);
 		exit(-1);
 	}
 	return sequence.substr(pos, length);
@@ -375,7 +378,7 @@ int main(int argc, char* argv[]) {
 		readers.emplace_back([&, i]() {
 			string cell_barcode, umi, feature_barcode;
 			uint64_t binary_cell, binary_umi, binary_feature;
-			int read1_len;
+			size_t read1_len;
 			int feature_id, collector_pos;
 
 			HashIterType cell_iter, feature_iter;
@@ -400,7 +403,7 @@ int main(int argc, char* argv[]) {
 							if (feature_iter != feature_index.end() && feature_iter->second.item_id >= 0) {
 								read1_len = read1.seq.length();
 								if (read1_len < cell_blen + umi_len) {
-									printf("Warning: Detected read1 length %d is smaller than cell barcode length %d + UMI length %d. Shorten UMI length to %d!\n", read1_len, cell_blen, umi_len, read1_len - cell_blen);
+									printf("Warning: Detected read1 length %zu is smaller than cell barcode length %zu + UMI length %zu. Shorten UMI length to %zu!\n", read1_len, cell_blen, umi_len, read1_len - cell_blen);
 									umi_len = read1_len - cell_blen;
 								}
 								umi = safe_substr(read1.seq, cell_blen, umi_len);
