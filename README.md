@@ -22,7 +22,7 @@ On Debian or Ubuntu Linux:
 sudo apt install build-essential git
 ```
 
-2. Install dependency packages:
+2. Download the package:
 
 ```
 git clone https://github.com/lilab-bcb/cumulus_feature_barcoding.git
