@@ -27,7 +27,7 @@ public:
 		++data_container[cell_id][umi][feature_id];
 	}
 
-	int output(const std::string& output_name, const std::string& feature_type, int feature_start, int feature_end, const std::vector<std::string>& cell_names, int umi_len, const std::vector<std::string>& feature_names, std::ofstream& freport) {
+	void output(const std::string& output_name, const std::string& feature_type, int feature_start, int feature_end, const std::vector<std::string>& cell_names, int umi_len, const std::vector<std::string>& feature_names, std::ofstream& freport) {
 		std::vector<int> cell_ids;
 		std::ofstream fout, fstat;
 
@@ -73,15 +73,13 @@ public:
 		fout.close();
 		printf("%s.csv is written.\n", output_name.c_str());
 
-		freport<< "Section "<< output_name<< std::endl;
+		freport<< std::endl<< "Section "<< output_name<< std::endl;
 		freport<< "Number of valid cell barcodes: "<< total_cells<< std::endl;
 		freport<< "Number of valid reads (with matching cell and feature barcodes): "<< total_reads<< std::endl;
 		freport<< "Mean number of valid reads per cell barcode: "<< std::fixed<< std::setprecision(2)<< (total_cells > 0 ? total_reads * 1.0 / total_cells : 0.0)<< std::endl;
 		freport<< "Number of valid UMIs (with matching cell and feature barcodes): "<< total_umis<< std::endl;
 		freport<< "Mean number of valid UMIs per cell barcode: "<< std::fixed<< std::setprecision(2)<< (total_cells > 0 ? total_umis * 1.0 / total_cells : 0.0)<< std::endl;
-		freport<< "Sequencing saturation: "<< std::fixed<< std::setprecision(2)<< (total_reads > 0 ? 100.0 - total_umis * 100.0 / total_reads : 0.0)<< "%"<< std::endl<< std::endl;
-
-		return total_reads;
+		freport<< "Sequencing saturation: "<< std::fixed<< std::setprecision(2)<< (total_reads > 0 ? 100.0 - total_umis * 100.0 / total_reads : 0.0)<< "%"<< std::endl;
 	}
 
 private:
