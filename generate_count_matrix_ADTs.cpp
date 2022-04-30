@@ -332,11 +332,12 @@ int main(int argc, char* argv[]) {
 	parse_sample_sheet(argv[1], n_cell, cell_blen, cell_index, cell_names, max_mismatch_cell, convert_cell_barcode);
 	printf("Time spent on parsing cell barcodes = %.2fs.\n", difftime(time(NULL), start_time));
 
-	int cnt = 0;
+	int cnt = 0, n_valid = 0, n_valid_cell = 0, n_valid_feature = 0; // cnt: total number of reads; n_valid, reads with valid cell barcode and feature barcode; n_valid_cell, reads with valid cell barcode; n_valid_feature, reads with valid feature barcode
 	string cell_barcode, umi, feature_barcode;
 	uint64_t binary_cell, binary_umi, binary_feature;
 	int read1_len;
 	int feature_id, collector_pos;
+	bool valid_cell, valid_feature;
 
 	dataCollectors.resize(n_cat > 0 ? n_cat : 1);
 
@@ -349,26 +350,33 @@ int main(int argc, char* argv[]) {
 			cell_barcode = safe_substr(read1.seq, 0, cell_blen);
 			binary_cell = barcode_to_binary(cell_barcode);
 			cell_iter = cell_index.find(binary_cell);
+			valid_cell = cell_iter != cell_index.end() && cell_iter->second.item_id >= 0;
 
-			if (cell_iter != cell_index.end() && cell_iter->second.item_id >= 0) {
-				if (extract_feature_barcode(read2.seq, feature_blen, feature_type, feature_barcode)) {
-					binary_feature = barcode_to_binary(feature_barcode);
-					feature_iter = feature_index.find(binary_feature);
-					if (feature_iter != feature_index.end() && feature_iter->second.item_id >= 0) {
-						read1_len = read1.seq.length();
-						if (read1_len < cell_blen + umi_len) {
-							printf("Warning: Detected read1 length %d is smaller than cell barcode length %d + UMI length %d. Shorten UMI length to %d!\n", read1_len, cell_blen, umi_len, read1_len - cell_blen);
-							umi_len = read1_len - cell_blen;
-						}
-						umi = safe_substr(read1.seq, cell_blen, umi_len);
-						binary_umi = barcode_to_binary(umi);
-
-						feature_id = feature_iter->second.item_id;
-						collector_pos = n_cat > 0 ? feature_categories[feature_id] : 0;
-						dataCollectors[collector_pos].insert(cell_iter->second.item_id, binary_umi, feature_id);
-					}
-				}
+			valid_feature = extract_feature_barcode(read2.seq, feature_blen, feature_type, feature_barcode);
+			if (valid_feature) {
+				binary_feature = barcode_to_binary(feature_barcode);
+				feature_iter = feature_index.find(binary_feature);
+				valid_feature = feature_iter != feature_index.end() && feature_iter->second.item_id >= 0;				
 			}
+
+			n_valid_cell += valid_cell;
+			n_valid_feature += valid_feature;
+
+			if (valid_cell && valid_feature) {
+				++n_valid;
+				read1_len = read1.seq.length();
+				if (read1_len < cell_blen + umi_len) {
+					printf("Warning: Detected read1 length %d is smaller than cell barcode length %d + UMI length %d. Shorten UMI length to %d!\n", read1_len, cell_blen, umi_len, read1_len - cell_blen);
+					umi_len = read1_len - cell_blen;
+				}
+				umi = safe_substr(read1.seq, cell_blen, umi_len);
+				binary_umi = barcode_to_binary(umi);
+
+				feature_id = feature_iter->second.item_id;
+				collector_pos = n_cat > 0 ? feature_categories[feature_id] : 0;
+				dataCollectors[collector_pos].insert(cell_iter->second.item_id, binary_umi, feature_id);
+			}
+
 			if (cnt % 1000000 == 0) printf("Processed %d reads.\n", cnt);
 		}
 	}
@@ -376,21 +384,21 @@ int main(int argc, char* argv[]) {
 	printf("Parsing input data is finished.\n");
 
 	string output_name = argv[4];
-
-	int n_valid = 0;
 	ofstream fout;
+
 	fout.open(output_name + ".report.txt");
-	fout<< "Total number of reads: "<< cnt<< endl<< endl;
+	fout<< "Total number of reads: "<< cnt<< endl;
+	fout<< "Number of reads with valid cell barcodes: "<< n_valid_cell<< " ("<< fixed<< setprecision(2)<< n_valid_cell * 100.0 / cnt << "%)"<< endl;
+	fout<< "Number of reads with valid feature barcodes: "<< n_valid_feature<< " ("<< fixed<< setprecision(2)<< n_valid_feature * 100.0 / cnt << "%)"<< endl;
+	fout<< "Number of reads with valid cell and feature barcodes: "<< n_valid<< " ("<< fixed<< setprecision(2)<< n_valid * 100.0 / cnt << "%)"<< endl;
 
 	if (n_cat == 0)
-		n_valid = dataCollectors[0].output(output_name, feature_type, 0, n_feature, cell_names, umi_len, feature_names, fout);
+		dataCollectors[0].output(output_name, feature_type, 0, n_feature, cell_names, umi_len, feature_names, fout);
 	else
 		for (int i = 0; i < n_cat; ++i) {
 			printf("Feature '%s':\n", cat_names[i].c_str());
-			n_valid += dataCollectors[i].output(output_name + "." + cat_names[i], feature_type, cat_nfs[i], cat_nfs[i + 1], cell_names, umi_len, feature_names, fout);
+			dataCollectors[i].output(output_name + "." + cat_names[i], feature_type, cat_nfs[i], cat_nfs[i + 1], cell_names, umi_len, feature_names, fout);
 		}
-
-	fout<< "Number of reads with valid cell and feature barcodes: "<< n_valid<< " ("<< fixed<< setprecision(2)<< n_valid * 100.0 / cnt << "%)"<< endl;
 	fout.close();
 
 	end_time = time(NULL);
