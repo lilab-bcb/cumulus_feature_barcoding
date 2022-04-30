@@ -3,7 +3,7 @@
 all : generate_count_matrix_ADTs
 
 generate_count_matrix_ADTs : generate_count_matrix_ADTs.cpp gzip_utils.hpp barcode_utils.hpp datamatrix_utils.hpp kseq.h
-	g++ --std=c++11 -O3 -lz -Wall $< -o $@
+	g++ --std=c++11 -O3 -Wall $< -o $@ -lz
 
 clean :
 	rm -f generate_count_matrix_ADTs

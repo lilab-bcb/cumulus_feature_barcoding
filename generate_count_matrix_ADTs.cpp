@@ -112,7 +112,7 @@ inline int matching(const string& readseq, const string& pattern, int nmax_mis, 
 	// f[x][y] = min(f[x - 1][y - 1] + delta, f[x][y - 1] + 1, f[x - 1][y] + 1)
 	int rlen = readseq.length(), plen = pattern.length();
 	int prev, curr, rpos;
-	int value, best_j;
+	int value, best_j = -1;
 
 	// init f[-1], do not allow insertion at the beginning
 	for (int j = 0; j < nmax_size; ++j) f[1][j] = nmax_mis + 1;
@@ -142,7 +142,7 @@ inline int matching(const string& readseq, const string& pattern, int nmax_mis, 
 
 // [start, end]
 inline int locate_scaffold_sequence(const string& sequence, const string& scaffold, int start, int end, int max_mismatch) {
-	int i, pos, best_value, value;
+	int i, pos, best_value = max_mismatch + 1, value;
 
 	for (i = start; i <= end; ++i) {
 		pos = matching(sequence, scaffold, max_mismatch, i, best_value);
