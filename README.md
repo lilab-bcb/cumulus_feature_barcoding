@@ -37,7 +37,6 @@ to see its usage.
 
 ### Compile on Mac OS
 
-```
 
 1. Compile
 
