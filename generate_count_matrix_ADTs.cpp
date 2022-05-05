@@ -261,10 +261,10 @@ int main(int argc, char* argv[]) {
 		printf("\tfeature_barcodes.csv\tfeature barcode file;barcode,feature_name[,feature_category]. Optional feature_category is required only if hashing and citeseq data share the same sample index\n");
 		printf("\tfastq_folders\tfolder contain all R1 and R2 FASTQ files ending with 001.fastq.gz\n");
 		printf("\toutput_name\toutput file name prefix\n");
-		printf("Options:\n\t--max-mismatch-cell #\tmaximum number of mismatches allowed for cell barcodes [default: 1]\n");
+		printf("Options:\n\t--max-mismatch-cell #\tmaximum number of mismatches allowed for cell barcodes [default: 0]\n");
 		printf("\t--feature feature_type\tfeature type can be either antibody or crispr [default: antibody]\n");
-		printf("\t--max-mismatch-feature #\tmaximum number of mismatches allowed for feature barcodes [default: 3]\n");
-		printf("\t--umi-length len\tlength of the UMI sequence [default: 10]\n");
+		printf("\t--max-mismatch-feature #\tmaximum number of mismatches allowed for feature barcodes [default: 2]\n");
+		printf("\t--umi-length len\tlength of the UMI sequence [default: 12]\n");
 		printf("\t--barcode-pos #\tstart position of barcode in read 2, 0-based coordinate [default: automatically determined for antibody; 0 for crispr].\n");
 		printf("\t--convert-cell-barcode\tconvert cell barcode to match RNA cell barcodes for 10x Genomics' data. Note that both cmo and 10x crispr need to set this option to convert feature barcoding barcodes to RNA barcodes. When data is hashing/CITE-Seq, this option will be automatically turned on for TotalSeq-B antibodies.\n");
 		printf("\t--scaffold-sequence sequence\tscaffold sequence used to locate the protospacer for sgRNA. This option is only used for crispr data. If --barcode-pos is not set and this option is set, try to locate barcode in front of the specified scaffold sequence.\n");
@@ -401,6 +401,7 @@ int main(int argc, char* argv[]) {
 		}
 	fout.close();
 
+	printf("%s.report.txt is written.\n", output_name.c_str());
 	end_time = time(NULL);
 	printf("Time spent = %.2fs.\n", difftime(end_time, start_time));
 
