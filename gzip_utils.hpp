@@ -7,8 +7,8 @@
 #include <streambuf>
 #include <fstream>
 
-#include <zlib.h>
-#include "kseq.h"
+#include "external/slw287r_trimadap/izlib.h"
+#include "external/kseq.h"
 
 struct Read {
 	std::string name, seq, qual;
