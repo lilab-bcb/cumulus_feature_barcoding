@@ -199,7 +199,7 @@ void detect_totalseq_type() {
 	cnt = ntotA = ntotBC = 0;
 	for (auto&& input_fastq : inputs) {
 		iGZipFile gzip_in_r2(input_fastq.input_r2);
-		while (gzip_in_r2.next(read2) == 4 && cnt < nskim) {
+		while (gzip_in_r2.next(read2) && cnt < nskim) {
 			binary_feature = barcode_to_binary(safe_substr(read2.seq, totalseq_A_pos, feature_blen));
 			feature_iter = feature_index.find(binary_feature);
 			ntotA += (feature_iter != feature_index.end() && feature_iter->second.item_id >= 0);
@@ -256,20 +256,20 @@ void parse_feature_names(int n_feature, vector<string>& feature_names, int& n_ca
 
 int main(int argc, char* argv[]) {
 	if (argc < 5) {
-		printf("Usage: generate_count_matrix_ADTs cell_barcodes.txt feature_barcodes.csv fastq_folders output_name [--max-mismatch-cell #] [--feature feature_type] [--max-mismatch-feature #] [--umi-length len] [--barcode-pos #] [--convert-cell-barcode] [--scaffold-sequence sequence]\n");
-		printf("Arguments:\n\tcell_barcodes.txt\t10x genomics barcode white list\n");
-		printf("\tfeature_barcodes.csv\tfeature barcode file;barcode,feature_name[,feature_category]. Optional feature_category is required only if hashing and citeseq data share the same sample index\n");
-		printf("\tfastq_folders\tfolder contain all R1 and R2 FASTQ files ending with 001.fastq.gz\n");
-		printf("\toutput_name\toutput file name prefix\n");
-		printf("Options:\n\t--max-mismatch-cell #\tmaximum number of mismatches allowed for cell barcodes [default: 0]\n");
-		printf("\t--feature feature_type\tfeature type can be either antibody or crispr [default: antibody]\n");
-		printf("\t--max-mismatch-feature #\tmaximum number of mismatches allowed for feature barcodes [default: 2]\n");
-		printf("\t--umi-length len\tlength of the UMI sequence [default: 12]\n");
-		printf("\t--barcode-pos #\tstart position of barcode in read 2, 0-based coordinate [default: automatically determined for antibody; 0 for crispr].\n");
+		printf("Usage: generate_count_matrix_ADTs cell_barcodes.txt[.gz] feature_barcodes.csv fastq_folders output_name [--max-mismatch-cell #] [--feature feature_type] [--max-mismatch-feature #] [--umi-length len] [--barcode-pos #] [--convert-cell-barcode] [--scaffold-sequence sequence]\n");
+		printf("Arguments:\n\tcell_barcodes.txt[.gz]\t10x genomics barcode white list, either gzipped or not.\n");
+		printf("\tfeature_barcodes.csv\tfeature barcode file;barcode,feature_name[,feature_category]. Optional feature_category is required only if hashing and citeseq data share the same sample index.\n");
+		printf("\tfastq_folders\tfolder containing all R1 and R2 FASTQ files ending with 001.fastq.gz .\n");
+		printf("\toutput_name\toutput file name prefix.\n");
+		printf("Options:\n\t--max-mismatch-cell #\tmaximum number of mismatches allowed for cell barcodes. [default: 0]\n");
+		printf("\t--feature feature_type\tfeature type can be either antibody or crispr. [default: antibody]\n");
+		printf("\t--max-mismatch-feature #\tmaximum number of mismatches allowed for feature barcodes. [default: 2]\n");
+		printf("\t--umi-length len\tlength of the UMI sequence. [default: 12]\n");
+		printf("\t--barcode-pos #\tstart position of barcode in read 2, 0-based coordinate. [default: automatically determined for antibody; 0 for crispr]\n");
 		printf("\t--convert-cell-barcode\tconvert cell barcode to match RNA cell barcodes for 10x Genomics' data. Note that both cmo and 10x crispr need to set this option to convert feature barcoding barcodes to RNA barcodes. When data is hashing/CITE-Seq, this option will be automatically turned on for TotalSeq-B antibodies.\n");
 		printf("\t--scaffold-sequence sequence\tscaffold sequence used to locate the protospacer for sgRNA. This option is only used for crispr data. If --barcode-pos is not set and this option is set, try to locate barcode in front of the specified scaffold sequence.\n");
-		printf("Outputs:\n\toutput_name.csv\tfeature-cell count matrix. First row: [Antibody/CRISPR],barcode_1,...,barcode_n;Other rows: feature_name,feature_count_1,...,feature_count_n\n");
-		printf("\toutput_name.stat.csv\tSufficient statistics file. First row: Barcode,UMI,Feature,Count; Other rows: each row describe the read count for one barcode-umi-feature combination\n\n");
+		printf("Outputs:\n\toutput_name.csv\tfeature-cell count matrix. First row: [Antibody/CRISPR],barcode_1,...,barcode_n;Other rows: feature_name,feature_count_1,...,feature_count_n.\n");
+		printf("\toutput_name.stat.csv\tSufficient statistics file. First row: Barcode,UMI,Feature,Count; Other rows: each row describe the read count for one barcode-umi-feature combination.\n\n");
 		printf("\tIf feature_category presents, this program will output the above two files for each feature_category. For example, if feature_category is hashing, output_name.hashing.csv and output_name.hashing.stat.csv.gz will be generated.\n");
 		printf("\toutput_name.report.txt\tA report file summarizing barcode, UMI and read results.\n");
 		exit(-1);
@@ -344,7 +344,7 @@ int main(int argc, char* argv[]) {
 	for (auto&& input_fastq : inputs) {
 		iGZipFile gzip_in_r1(input_fastq.input_r1);
 		iGZipFile gzip_in_r2(input_fastq.input_r2);
-		while (gzip_in_r1.next(read1) == 4 && gzip_in_r2.next(read2) == 4) {
+		while (gzip_in_r1.next(read1) && gzip_in_r2.next(read2)) {
 			++cnt;
 
 			cell_barcode = safe_substr(read1.seq, 0, cell_blen);

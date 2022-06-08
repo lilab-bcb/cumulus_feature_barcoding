@@ -135,41 +135,53 @@ inline void mutate_index(HashType& index_dict, uint64_t binary_id, int len, int 
 	}
 }
 
-void parse_sample_sheet(const char* sample_sheet_file, int& n_barcodes, int& barcode_len, HashType& index_dict, std::vector<std::string>& index_names, int max_mismatch = 1, bool convert_cell_barcode = false) {
-	std::ifstream fin(sample_sheet_file);
-	std::string line, index_name, index_seq;
+inline void parse_one_line(const std::string& line, int& n_barcodes, int& barcode_len, HashType& index_dict, std::vector<std::string>& index_names, int max_mismatch, bool convert_cell_barcode) {
+	std::string index_name, index_seq;
 	std::size_t pos;
+
+	if (line.empty()) return;
+
+	pos = line.find_first_of(',');
+
+	if (pos != std::string::npos) { index_seq = line.substr(0, pos); index_name = line.substr(pos + 1); }
+	else { index_seq = line; index_name = line; }
+
+	if (barcode_len == 0) barcode_len = index_seq.length();
+	else assert(barcode_len == index_seq.length());
+
+	if (convert_cell_barcode) {
+		pos = barcode_len / 2 - 1;
+		index_seq[pos] = base2rcbase[index_seq[pos]];
+		++pos;
+		index_seq[pos] = base2rcbase[index_seq[pos]];
+	}
+
+	if (max_mismatch == 1) mutate_index_one_mismatch(index_dict, index_seq, n_barcodes);
+	else mutate_index(index_dict, barcode_to_binary(index_seq), index_seq.length(), n_barcodes, max_mismatch, 0, 0);
+
+	index_names.push_back(index_name);
+	++n_barcodes;	
+}
+
+
+void parse_sample_sheet(const std::string& sample_sheet_file, int& n_barcodes, int& barcode_len, HashType& index_dict, std::vector<std::string>& index_names, int max_mismatch = 1, bool convert_cell_barcode = false) {
+	std::string line;
 
 	n_barcodes = 0;
 	barcode_len = 0;
 	index_dict.clear();
 	index_names.clear();
-	while (std::getline(fin, line)) {
-		if (line.empty()) continue;
 
-		pos = line.find_first_of(',');
-
-		if (pos != std::string::npos) { index_seq = line.substr(0, pos); index_name = line.substr(pos + 1); }
-		else { index_seq = line; index_name = line; }
-
-		if (barcode_len == 0) barcode_len = index_seq.length();
-		else assert(barcode_len == index_seq.length());
-
-		if (convert_cell_barcode) {
-			pos = barcode_len / 2 - 1;
-			index_seq[pos] = base2rcbase[index_seq[pos]];
-			++pos;
-			index_seq[pos] = base2rcbase[index_seq[pos]];
-		}
-
-		if (max_mismatch == 1) mutate_index_one_mismatch(index_dict, index_seq, n_barcodes);
-		else mutate_index(index_dict, barcode_to_binary(index_seq), index_seq.length(), n_barcodes, max_mismatch, 0, 0);
-
-		index_names.push_back(index_name);
-		++n_barcodes;
+	if (sample_sheet_file.length() > 3 && sample_sheet_file.substr(sample_sheet_file.length() - 3, 3) == ".gz") { // input sample sheet is gzipped
+		iGZipFile gin(sample_sheet_file);
+		while (gin.next(line)) parse_one_line(line, n_barcodes, barcode_len, index_dict, index_names, max_mismatch, convert_cell_barcode);
 	}
-	fin.close();
-	printf("%s is parsed. n_barcodes = %d, and barcode_len = %d.\n", sample_sheet_file, n_barcodes, barcode_len);
+	else {
+		std::ifstream fin(sample_sheet_file);
+		while (std::getline(fin, line)) parse_one_line(line, n_barcodes, barcode_len, index_dict, index_names, max_mismatch, convert_cell_barcode);
+		fin.close();
+	}
+	printf("%s is parsed. n_barcodes = %d, and barcode_len = %d.\n", sample_sheet_file.c_str(), n_barcodes, barcode_len);
 
 	int n_amb = 0;
 	for (auto&& kv : index_dict)
