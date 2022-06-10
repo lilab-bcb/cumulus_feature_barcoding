@@ -40,7 +40,8 @@ to see its usage.
 1. Homebrew installation
 
 ```
-homebrew isa-l
+brew install isa-l
+brew install libdeflate
 ```
 
 2. Compile

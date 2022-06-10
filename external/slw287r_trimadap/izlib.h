@@ -6,7 +6,8 @@
 #include <string.h>
 #include <inttypes.h>
 #include <sys/stat.h>
-#include "igzip_lib.h"
+#include <isa-l/igzip_lib.h>
+// #include "igzip_lib.h"
 
 #ifndef UNIX
 #define UNIX 3
