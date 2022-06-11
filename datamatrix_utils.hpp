@@ -29,7 +29,7 @@ public:
 
 	void output(const std::string& output_name, const std::string& feature_type, int feature_start, int feature_end, const std::vector<std::string>& cell_names, int umi_len, const std::vector<std::string>& feature_names, std::ofstream& freport) {
 		std::vector<int> cell_ids;
-		std::ofstream fout, fstat;
+		std::ofstream fout;
 
 		int total_cells = 0, total_reads = 0, total_umis = 0;
 
@@ -42,13 +42,17 @@ public:
 		std::vector<int> dummy(total_cells, 0), tot_umis(total_cells, 0);
 		std::vector<std::vector<int> > ADTs(feature_end - feature_start, dummy);
 
-		fstat.open(output_name + ".stat.csv");
-		fstat<< "Barcode,UMI,Feature,Count"<< std::endl;
+
+		oGZipFile gout(output_name + ".stat.csv.gz");
+		gout.write("Barcode,UMI,Feature,Count\n");
 		for (int i = 0; i < total_cells; ++i) {
 			auto& one_cell = data_container[cell_ids[i]];
 			for (auto&& kv1 : one_cell) {
 				for (auto&& kv2 : kv1.second) {
-					fstat<< cell_names[cell_ids[i]]<< ","<< binary_to_barcode(kv1.first, umi_len)<< ","<< feature_names[kv2.first]<< ","<< kv2.second<< std::endl;
+					gout.write(cell_names[cell_ids[i]]); gout.write(',');
+					gout.write(binary_to_barcode(kv1.first, umi_len)); gout.write(',');
+					gout.write(feature_names[kv2.first]); gout.write(',');
+					gout.write(std::to_string(kv2.second)); gout.write('\n');
 					total_reads += kv2.second;
 					++total_umis;
 					++ADTs[kv2.first - feature_start][i];
@@ -56,8 +60,8 @@ public:
 				}
 			}
 		}
-		fstat.close();
-		printf("%s.stat.csv is written.\n", output_name.c_str());
+		gout.close();
+		printf("%s.stat.csv.gz is written.\n", output_name.c_str());
 
 		fout.open(output_name + ".csv");
 		fout<< (feature_type == "antibody" ? "Antibody" : "CRISPR");
