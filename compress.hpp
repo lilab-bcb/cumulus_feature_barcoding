@@ -1,8 +1,6 @@
 #ifndef COMPRESS
 #define COMPRESS
 
-/** This header was inspired by fastp's (https://github.com/OpenGene/fastp) writer.h and writer.cpp */
-
 #include <cstdio>
 #include <cstdlib>
 #include <thread>
@@ -155,7 +153,7 @@ struct MultiThreadsCompressor: public Compressor {
 	size_t compress() {
 		int n_active = cur_pos + (compressors[cur_pos]->datsize > 0);
 		cur_pos = 0;
-		
+
 		if (n_active == 0) return 0;
 		if (n_active == 1) {
 			out_sizes[0] = compressors[0]->compress();

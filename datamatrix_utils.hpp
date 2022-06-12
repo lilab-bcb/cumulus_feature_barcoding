@@ -1,7 +1,6 @@
 #ifndef DATAMATRIX_UTILS
 #define DATAMATRIX_UTILS
 
-#include <ctime>
 #include <cstdio>
 #include <cstdint>
 #include <string>
@@ -43,9 +42,6 @@ public:
 		std::vector<int> dummy(total_cells, 0), tot_umis(total_cells, 0);
 		std::vector<std::vector<int> > ADTs(feature_end - feature_start, dummy);
 
-		time_t start_, end_;
-		start_ = time(NULL);
-
 		oGZipFile gout(output_name + ".stat.csv.gz", n_threads);
 		gout.write("Barcode,UMI,Feature,Count\n");
 		for (int i = 0; i < total_cells; ++i) {
@@ -65,9 +61,6 @@ public:
 		}
 		gout.close();
 		printf("%s.stat.csv.gz is written.\n", output_name.c_str());
-
-		end_ = time(NULL);
-		printf("Time spent compressing = %.2fs.\n", difftime(end_, start_));
 
 		fout.open(output_name + ".csv");
 		fout<< (feature_type == "antibody" ? "Antibody" : "CRISPR");
