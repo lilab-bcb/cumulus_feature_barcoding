@@ -1,6 +1,7 @@
 #ifndef DATAMATRIX_UTILS
 #define DATAMATRIX_UTILS
 
+#include <ctime>
 #include <cstdio>
 #include <cstdint>
 #include <string>
@@ -27,7 +28,7 @@ public:
 		++data_container[cell_id][umi][feature_id];
 	}
 
-	void output(const std::string& output_name, const std::string& feature_type, int feature_start, int feature_end, const std::vector<std::string>& cell_names, int umi_len, const std::vector<std::string>& feature_names, std::ofstream& freport) {
+	void output(const std::string& output_name, const std::string& feature_type, int feature_start, int feature_end, const std::vector<std::string>& cell_names, int umi_len, const std::vector<std::string>& feature_names, std::ofstream& freport, int n_threads) {
 		std::vector<int> cell_ids;
 		std::ofstream fout;
 
@@ -42,8 +43,10 @@ public:
 		std::vector<int> dummy(total_cells, 0), tot_umis(total_cells, 0);
 		std::vector<std::vector<int> > ADTs(feature_end - feature_start, dummy);
 
+		time_t start_, end_;
+		start_ = time(NULL);
 
-		oGZipFile gout(output_name + ".stat.csv.gz");
+		oGZipFile gout(output_name + ".stat.csv.gz", n_threads);
 		gout.write("Barcode,UMI,Feature,Count\n");
 		for (int i = 0; i < total_cells; ++i) {
 			auto& one_cell = data_container[cell_ids[i]];
@@ -62,6 +65,9 @@ public:
 		}
 		gout.close();
 		printf("%s.stat.csv.gz is written.\n", output_name.c_str());
+
+		end_ = time(NULL);
+		printf("Time spent compressing = %.2fs.\n", difftime(end_, start_));
 
 		fout.open(output_name + ".csv");
 		fout<< (feature_type == "antibody" ? "Antibody" : "CRISPR");
