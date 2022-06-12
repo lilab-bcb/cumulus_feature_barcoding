@@ -154,6 +154,7 @@ struct MultiThreadsCompressor: public Compressor {
 
 	size_t compress() {
 		int n_active = cur_pos + (compressors[cur_pos]->datsize > 0);
+		cur_pos = 0;
 		
 		if (n_active == 0) return 0;
 		if (n_active == 1) {
