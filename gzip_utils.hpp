@@ -8,12 +8,18 @@
 
 #include "external/slw287r_trimadap/izlib.h"
 #include "external/kseq.h"
+#include "compress.hpp"
+
 
 struct Read {
-	std::string name, comment, seq, qual; // qual.empty() -> FASTQ reads
+	std::string name, comment, seq, qual; // qual.empty() -> FASTA reads
+
+	size_t size() const {
+		return name.length() + (comment.empty() ? 0 : 1 + comment.length()) + seq.length() + 3 + (qual.empty() ? 0 : 3 + qual.length());
+	}
 
 	std::string toString() const {
-		return "@" + name + (comment.empty() ? "" : (" " + comment)) + "\n" + seq + "\n+\n" + qual + "\n";
+		return "@" + name + (comment.empty() ? "" : (" " + comment)) + "\n" + seq + "\n" + (qual.empty() ? "" : "+\n" + qual + "\n");
 	}
 };
 
@@ -83,6 +89,77 @@ struct iGZipFile {
 		}
 
 		return false;
+	}
+};
+
+
+struct oGZipFile {
+	FILE *fo;
+	Compressor *compressor;
+
+	oGZipFile(const std::string& output_file, int num_threads = 1, size_t buffer_size = compressor_buffer_size, int compression_level = 6) {
+		fo = fopen(output_file.c_str(), "wb");
+		if (fo == NULL) {
+			printf("Cannot creat output file %s!\n", output_file.c_str());
+			exit(-1);
+		}
+
+		assert(num_threads >= 1);
+		compressor = NULL;
+		if (num_threads == 1) {
+			compressor = new SingleThreadCompressor(buffer_size, compression_level);
+		} 
+		else {
+			compressor = new MultiThreadsCompressor(num_threads, buffer_size, compression_level);
+		}
+	}
+
+	~oGZipFile() {
+		close();
+	}
+
+	void close() {
+		if (fo != NULL) {
+			flush();
+			fclose(fo);
+			delete compressor;
+			fo = NULL;
+			compressor = NULL;			
+		}
+	}
+
+	void flush() {
+		size_t cprs_size = compressor->compress();
+		if (cprs_size > 0) compressor->flushOut(fo, cprs_size);
+	}
+
+	void write(const Read& aread) {
+		if (compressor->needFlush(aread.size())) flush();
+		compressor->writeToBuffer('@');
+		compressor->writeToBuffer(aread.name.c_str(), aread.name.length());
+		if (!aread.comment.empty()) {
+			compressor->writeToBuffer(' ');
+			compressor->writeToBuffer(aread.comment.c_str(), aread.comment.length());
+		}
+		compressor->writeToBuffer('\n');
+		compressor->writeToBuffer(aread.seq.c_str(), aread.seq.length());
+		compressor->writeToBuffer('\n');
+		if (!aread.qual.empty()) {
+			compressor->writeToBuffer('+');
+			compressor->writeToBuffer('\n');
+			compressor->writeToBuffer(aread.qual.c_str(), aread.qual.length());
+			compressor->writeToBuffer('\n');
+		}
+	}
+
+	void write(const std::string& line) {
+		if (compressor->needFlush(line.length())) flush();
+		compressor->writeToBuffer(line.c_str(), line.length());
+	}
+
+	void write(char c) {
+		if (compressor->needFlush(1)) flush();
+		compressor->writeToBuffer(c);
 	}
 };
 

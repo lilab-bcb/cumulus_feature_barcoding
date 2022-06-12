@@ -11,7 +11,7 @@ The installation has been tested on Debian and Ubuntu Linux.
 1. Install dependency packages:
 
 ```
-sudo apt install build-essential git libisal2
+sudo apt install build-essential git libisal2 libisal-dev libdeflate0 libdeflate-dev
 ```
 
 2. Check out this repository via Git:
@@ -40,7 +40,8 @@ to see its usage.
 1. Homebrew installation
 
 ```
-homebrew isa-l
+brew install isa-l
+brew install libdeflate
 ```
 
 2. Compile

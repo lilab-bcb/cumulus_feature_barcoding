@@ -28,7 +28,7 @@ struct InputFile {
 	InputFile(string r1, string r2) : input_r1(r1), input_r2(r2) {}
 };
 
-int max_mismatch_cell, max_mismatch_feature, umi_len;
+int n_threads, max_mismatch_cell, max_mismatch_feature, umi_len;
 string feature_type, totalseq_type, scaffold_sequence;
 int barcode_pos; // Antibody: Total-Seq A 0; Total-Seq B or C 10. Crispr: default 0, can be set by option
 bool convert_cell_barcode;
@@ -256,12 +256,14 @@ void parse_feature_names(int n_feature, vector<string>& feature_names, int& n_ca
 
 int main(int argc, char* argv[]) {
 	if (argc < 5) {
-		printf("Usage: generate_count_matrix_ADTs cell_barcodes.txt[.gz] feature_barcodes.csv fastq_folders output_name [--max-mismatch-cell #] [--feature feature_type] [--max-mismatch-feature #] [--umi-length len] [--barcode-pos #] [--convert-cell-barcode] [--scaffold-sequence sequence]\n");
+		printf("Usage: generate_count_matrix_ADTs cell_barcodes.txt[.gz] feature_barcodes.csv fastq_folders output_name [-p #] [--max-mismatch-cell #] [--feature feature_type] [--max-mismatch-feature #] [--umi-length len] [--barcode-pos #] [--convert-cell-barcode] [--scaffold-sequence sequence]\n");
 		printf("Arguments:\n\tcell_barcodes.txt[.gz]\t10x genomics barcode white list, either gzipped or not.\n");
 		printf("\tfeature_barcodes.csv\tfeature barcode file;barcode,feature_name[,feature_category]. Optional feature_category is required only if hashing and citeseq data share the same sample index.\n");
 		printf("\tfastq_folders\tfolder containing all R1 and R2 FASTQ files ending with 001.fastq.gz .\n");
 		printf("\toutput_name\toutput file name prefix.\n");
-		printf("Options:\n\t--max-mismatch-cell #\tmaximum number of mismatches allowed for cell barcodes. [default: 0]\n");
+		printf("Options:\n");
+		printf("\t-p #\tnumber of threads. [default: 1]\n");
+		printf("\t--max-mismatch-cell #\tmaximum number of mismatches allowed for cell barcodes. [default: 0]\n");
 		printf("\t--feature feature_type\tfeature type can be either antibody or crispr. [default: antibody]\n");
 		printf("\t--max-mismatch-feature #\tmaximum number of mismatches allowed for feature barcodes. [default: 2]\n");
 		printf("\t--umi-length len\tlength of the UMI sequence. [default: 12]\n");
@@ -269,7 +271,7 @@ int main(int argc, char* argv[]) {
 		printf("\t--convert-cell-barcode\tconvert cell barcode to match RNA cell barcodes for 10x Genomics' data. Note that both cmo and 10x crispr need to set this option to convert feature barcoding barcodes to RNA barcodes. When data is hashing/CITE-Seq, this option will be automatically turned on for TotalSeq-B antibodies.\n");
 		printf("\t--scaffold-sequence sequence\tscaffold sequence used to locate the protospacer for sgRNA. This option is only used for crispr data. If --barcode-pos is not set and this option is set, try to locate barcode in front of the specified scaffold sequence.\n");
 		printf("Outputs:\n\toutput_name.csv\tfeature-cell count matrix. First row: [Antibody/CRISPR],barcode_1,...,barcode_n;Other rows: feature_name,feature_count_1,...,feature_count_n.\n");
-		printf("\toutput_name.stat.csv\tSufficient statistics file. First row: Barcode,UMI,Feature,Count; Other rows: each row describe the read count for one barcode-umi-feature combination.\n\n");
+		printf("\toutput_name.stat.csv.gz\tSufficient statistics file. First row: Barcode,UMI,Feature,Count; Other rows: each row describe the read count for one barcode-umi-feature combination.\n\n");
 		printf("\tIf feature_category presents, this program will output the above two files for each feature_category. For example, if feature_category is hashing, output_name.hashing.csv and output_name.hashing.stat.csv.gz will be generated.\n");
 		printf("\toutput_name.report.txt\tA report file summarizing barcode, UMI and read results.\n");
 		exit(-1);
@@ -277,6 +279,7 @@ int main(int argc, char* argv[]) {
 
 	start_time = time(NULL);
 
+	n_threads = 1;
 	max_mismatch_cell = 1;
 	feature_type = "antibody";
 	max_mismatch_feature = 3;
@@ -287,6 +290,9 @@ int main(int argc, char* argv[]) {
 	convert_cell_barcode = false;
 
 	for (int i = 5; i < argc; ++i) {
+		if (!strcmp(argv[i], "-p")) {
+			n_threads = atoi(argv[i + 1]);
+		}
 		if (!strcmp(argv[i], "--max-mismatch-cell")) {
 			max_mismatch_cell = atoi(argv[i + 1]);
 		}
@@ -393,11 +399,11 @@ int main(int argc, char* argv[]) {
 	fout<< "Number of reads with valid cell and feature barcodes: "<< n_valid<< " ("<< fixed<< setprecision(2)<< n_valid * 100.0 / cnt << "%)"<< endl;
 
 	if (n_cat == 0)
-		dataCollectors[0].output(output_name, feature_type, 0, n_feature, cell_names, umi_len, feature_names, fout);
+		dataCollectors[0].output(output_name, feature_type, 0, n_feature, cell_names, umi_len, feature_names, fout, n_threads);
 	else
 		for (int i = 0; i < n_cat; ++i) {
 			printf("Feature '%s':\n", cat_names[i].c_str());
-			dataCollectors[i].output(output_name + "." + cat_names[i], feature_type, cat_nfs[i], cat_nfs[i + 1], cell_names, umi_len, feature_names, fout);
+			dataCollectors[i].output(output_name + "." + cat_names[i], feature_type, cat_nfs[i], cat_nfs[i + 1], cell_names, umi_len, feature_names, fout, n_threads);
 		}
 	fout.close();
 
