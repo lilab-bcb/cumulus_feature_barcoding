@@ -97,13 +97,21 @@ struct oGZipFile {
 	FILE *fo;
 	Compressor *compressor;
 
-	oGZipFile(const std::string& output_file, size_t buffer_size = compressor_buffer_size, int compression_level = 6) {
+	oGZipFile(const std::string& output_file, int num_threads = 1, size_t buffer_size = compressor_buffer_size, int compression_level = 6) {
 		fo = fopen(output_file.c_str(), "wb");
 		if (fo == NULL) {
 			printf("Cannot creat output file %s!\n", output_file.c_str());
 			exit(-1);
 		}
-		compressor = new SingleThreadCompressor(buffer_size, compression_level);
+
+		assert(num_threads >= 1);
+		compressor = NULL;
+		if (num_threads == 1) {
+			compressor = new SingleThreadCompressor(buffer_size, compression_level);
+		} 
+		else {
+			compressor = new MultiThreadsCompressor(num_threads, buffer_size, compression_level);
+		}
 	}
 
 	~oGZipFile() {
