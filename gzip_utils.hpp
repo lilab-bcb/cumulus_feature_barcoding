@@ -23,32 +23,39 @@ struct Read {
 	}
 };
 
+KSEQ_INIT(gzFile, gzread);
+
 struct iGZipFile {
-	KSEQ_INIT(gzFile, gzread);
+	std::string input_file_;
+	gzFile sequence_file = nullptr;
+	kseq_t* sequence_kseq = nullptr;
 
-	gzFile sequence_file = NULL;
-	kseq_t* sequence_kseq = NULL;
 
-
-	iGZipFile(const std::string& input_file) {
-		sequence_file = gzopen(input_file.c_str(), "r");
-		if (sequence_file == NULL) {
-			printf("Cannot find sequence file %s!\n", input_file.c_str());
+	iGZipFile(const std::string& input_file) : input_file_(input_file) {
+		sequence_file = gzopen(input_file_.c_str(), "r");
+		if (sequence_file == nullptr) {
+			printf("Cannot find sequence file %s!\n", input_file_.c_str());
 			exit(-1);
 		}
 		sequence_kseq = kseq_init(sequence_file);
 	}
 
+	iGZipFile(iGZipFile&& o) {
+		input_file_ = std::move(o.input_file_);
+		sequence_file = o.sequence_file;
+		sequence_kseq = o.sequence_kseq;
+		o.sequence_file = nullptr;
+		o.sequence_kseq = nullptr;
+	}
+
 	~iGZipFile() {
-		kseq_destroy(sequence_kseq);
-		gzclose(sequence_file);
-		sequence_kseq = NULL;
+		if (sequence_kseq != nullptr) kseq_destroy(sequence_kseq);
+		if (sequence_file != nullptr) gzclose(sequence_file);
 	}
 
 
 	bool next(Read& aread) {
 		int length = kseq_read(sequence_kseq);
-
 		if (length > 0) {
 			aread.name = sequence_kseq->name.s;
 			aread.comment = sequence_kseq->comment.s;
@@ -58,16 +65,16 @@ struct iGZipFile {
 		else if (length == -1) 
 			return false; // End of file
 		else if (length == -3) {
-			printf("Error reading stream; didn't reach the end of sequence file, which might be corrupted!\n");
+			printf("File %s: error reading stream; didn't reach the end of sequence file, which might be corrupted!\n", input_file_.c_str());
 			exit(-1);			
 		}
 		else if (length == -2) {
-			printf("Truncated quality string!\n");
+			printf("File %s: truncated quality string!\n", input_file_.c_str());
 			exit(-1);			
 		}
 		else {
 			assert(length == 0);
-			printf("Detected a read with 0 sequence length!\n");
+			printf("File %s: Detected a read with 0 sequence length!\n", input_file_.c_str());
 			exit(-1);
 		}
 
@@ -79,7 +86,7 @@ struct iGZipFile {
 		int ret = ks_getuntil(sequence_kseq->f, KS_SEP_LINE, &sequence_kseq->comment, 0);
 
 		if (ret == -3) {
-			printf("Error reading stream in next(line)!\n");
+			printf("File %s: error reading stream in next(line)!\n", input_file_.c_str());
 			exit(-1);						
 		}
 
@@ -94,18 +101,18 @@ struct iGZipFile {
 
 
 struct oGZipFile {
-	FILE *fo;
-	Compressor *compressor;
+	FILE *fo = nullptr;
+	Compressor *compressor = nullptr;
 
 	oGZipFile(const std::string& output_file, int num_threads = 1, size_t buffer_size = compressor_buffer_size, int compression_level = 6) {
 		fo = fopen(output_file.c_str(), "wb");
-		if (fo == NULL) {
+		if (fo == nullptr) {
 			printf("Cannot creat output file %s!\n", output_file.c_str());
 			exit(-1);
 		}
 
 		assert(num_threads >= 1);
-		compressor = NULL;
+		compressor = nullptr;
 		if (num_threads == 1) {
 			compressor = new SingleThreadCompressor(buffer_size, compression_level);
 		} 
@@ -114,17 +121,24 @@ struct oGZipFile {
 		}
 	}
 
+	oGZipFile(oGZipFile&& o) {
+		fo = o.fo;
+		compressor = o.compressor;
+		o.fo = nullptr;
+		o.compressor = nullptr;
+	}
+
 	~oGZipFile() {
 		close();
 	}
 
 	void close() {
-		if (fo != NULL) {
+		if (fo != nullptr) {
 			flush();
 			fclose(fo);
 			delete compressor;
-			fo = NULL;
-			compressor = NULL;			
+			fo = nullptr;
+			compressor = nullptr;			
 		}
 	}
 
