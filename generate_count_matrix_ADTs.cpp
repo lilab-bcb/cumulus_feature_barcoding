@@ -9,12 +9,17 @@
 #include <fstream>
 #include <iomanip>
 #include <algorithm>
+#include <memory>
+#include <atomic>
+#include <mutex>
+#include <thread>
 
 #include "dirent.h"
 
 #include "gzip_utils.hpp"
 #include "barcode_utils.hpp"
 #include "datamatrix_utils.hpp"
+#include "ReadParser.hpp"
 
 using namespace std;
 
@@ -22,35 +27,39 @@ using namespace std;
 const int totalseq_A_pos = 0;
 const int totalseq_BC_pos = 10;
 
-struct InputFile {
-	string input_r1, input_r2;
 
-	InputFile(string r1, string r2) : input_r1(r1), input_r2(r2) {}
-};
+atomic<int> cnt, n_valid, n_valid_cell, n_valid_feature, prev_cnt; // cnt: total number of reads; n_valid, reads with valid cell barcode and feature barcode; n_valid_cell, reads with valid cell barcode; n_valid_feature, reads with valid feature barcode; prev_cnt: for printing # of reads processed purpose
 
 int n_threads, max_mismatch_cell, max_mismatch_feature, umi_len;
 string feature_type, totalseq_type, scaffold_sequence;
 int barcode_pos; // Antibody: Total-Seq A 0; Total-Seq B or C 10. Crispr: default 0, can be set by option
 bool convert_cell_barcode;
 
-time_t start_time, end_time;
+time_t start_, interim_, end_;
 
-vector<InputFile> inputs;
-
-Read read1, read2;
+vector<vector<string>> inputs;
 
 int n_cell, n_feature; // number of cell and feature barcodes
 int cell_blen, feature_blen; // cell barcode length and feature barcode length
 vector<string> cell_names, feature_names;
 HashType cell_index, feature_index;
-HashIterType cell_iter, feature_iter;
-
-int f[2][7]; // for banded dynamic programming, max allowed mismatch = 3
 
 int n_cat; // number of feature categories (e.g. hashing, citeseq)
+bool detected_ftype; // if feature csv contains feature type information
 vector<string> cat_names; // category names
 vector<int> cat_nfs, feature_categories; // cat_nfs, number of features in each category; int representing categories.
 vector<DataCollector> dataCollectors;
+
+struct result_t {
+	int cell_id, feature_id;
+	uint64_t umi;
+
+	result_t(int cell_id, uint64_t umi, int feature_id) : cell_id(cell_id), feature_id(feature_id), umi(umi) {}
+};
+
+vector<vector<vector<result_t>>> result_buffer;
+vector<thread> processingThreads_;
+vector<unique_ptr<mutex>> collector_locks;
 
 
 void parse_input_directory(char* input_dirs) {
@@ -97,7 +106,10 @@ void parse_input_directory(char* input_dirs) {
 		sort(mate2s.begin(), mate2s.end());
 
 		for (int i = 0; i < s; ++i) {
-			inputs.emplace_back(dir_name + mate1s[i], dir_name + mate2s[i]);
+			vector<string> one_pair(2);
+			one_pair[0] = dir_name + mate1s[i];
+			one_pair[1] = dir_name + mate2s[i];
+			inputs.push_back(move(one_pair));
 		}
 
 		input_dir = strtok(NULL, ",");
@@ -108,6 +120,7 @@ void parse_input_directory(char* input_dirs) {
 // return rightmost position + 1
 inline int matching(const string& readseq, const string& pattern, int nmax_mis, int pos, int& best_value) {
 	int nmax_size = nmax_mis * 2 + 1;
+	int f[2][7]; // for banded dynamic programming, max allowed mismatch = 3
 	// f[x][y] : x, pattern, y, readseq
 	// f[x][y] = min(f[x - 1][y - 1] + delta, f[x][y - 1] + 1, f[x - 1][y] + 1)
 	int rlen = readseq.length(), plen = pattern.length();
@@ -195,10 +208,12 @@ void detect_totalseq_type() {
 	const int nskim = 10000; // Look at first 10000 reads.
 	int ntotA, ntotBC, cnt;
 	uint64_t binary_feature;
+	Read read2;
+	HashIterType feature_iter;
 
 	cnt = ntotA = ntotBC = 0;
-	for (auto&& input_fastq : inputs) {
-		iGZipFile gzip_in_r2(input_fastq.input_r2);
+	for (auto&& input_pair : inputs) {
+		iGZipFile gzip_in_r2(input_pair[1]);
 		while (gzip_in_r2.next(read2) && cnt < nskim) {
 			binary_feature = barcode_to_binary(safe_substr(read2.seq, totalseq_A_pos, feature_blen));
 			feature_iter = feature_index.find(binary_feature);
@@ -226,30 +241,107 @@ void detect_totalseq_type() {
 }
 
 
-void parse_feature_names(int n_feature, vector<string>& feature_names, int& n_cat, vector<string>& cat_names, vector<int>& cat_nfs, vector<int>& feature_categories) {
+bool parse_feature_names(int n_feature, vector<string>& feature_names, int& n_cat, vector<string>& cat_names, vector<int>& cat_nfs, vector<int>& feature_categories) {
 	std::size_t pos;
 	string cat_str;
 
-	n_cat = 0;
-
 	pos = feature_names[0].find_first_of(',');
-	if (pos != string::npos) {
-		cat_names.clear();
-		cat_nfs.clear();
-		feature_categories.resize(n_feature, 0);
-		for (int i = 0; i < n_feature; ++i) {
-			pos = feature_names[i].find_first_of(',');
-			assert(pos != string::npos);
-			cat_str = feature_names[i].substr(pos + 1);
-			feature_names[i] = feature_names[i].substr(0, pos);
-			if (n_cat == 0 || cat_names.back() != cat_str) {
-				cat_names.push_back(cat_str);
-				cat_nfs.push_back(i);
-				++n_cat;
-			}
-			feature_categories[i] = n_cat - 1;
+	if (pos == string::npos) {
+		n_cat = 1;
+		return false;
+	}
+
+	n_cat = 0;
+	cat_names.clear();
+	cat_nfs.clear();
+	feature_categories.resize(n_feature, 0);
+	for (int i = 0; i < n_feature; ++i) {
+		pos = feature_names[i].find_first_of(',');
+		assert(pos != string::npos);
+		cat_str = feature_names[i].substr(pos + 1);
+		feature_names[i] = feature_names[i].substr(0, pos);
+		if (n_cat == 0 || cat_names.back() != cat_str) {
+			cat_names.push_back(cat_str);
+			cat_nfs.push_back(i);
+			++n_cat;
 		}
-		cat_nfs.push_back(n_feature);
+		feature_categories[i] = n_cat - 1;
+	}
+	cat_nfs.push_back(n_feature);
+
+	return true;
+}
+
+void process_reads(ReadParser *parser, int thread_id) {
+	string cell_barcode, umi, feature_barcode;
+	uint64_t binary_cell, binary_umi, binary_feature;
+	int read1_len;
+	int cell_id, feature_id, collector_pos;
+	bool valid_cell, valid_feature;
+	HashIterType cell_iter, feature_iter;
+
+	int cnt_, n_valid_, n_valid_cell_, n_valid_feature_;
+
+	auto& buffer = result_buffer[thread_id];
+
+	auto rg = parser->getReadGroup();
+	while (parser->refill(rg)) {
+		cnt_ = n_valid_ = n_valid_cell_ = n_valid_feature_ = 0;
+		for (int i = 0; i < n_cat; ++i) buffer[i].clear();
+
+		for (auto& read_pair : rg) {
+			auto& read1 = read_pair[0];
+			auto& read2 = read_pair[1];
+
+			++cnt_;
+			cell_barcode = safe_substr(read1.seq, 0, cell_blen);
+			binary_cell = barcode_to_binary(cell_barcode);
+			cell_iter = cell_index.find(binary_cell);
+			valid_cell = cell_iter != cell_index.end() && cell_iter->second.item_id >= 0;
+
+			valid_feature = extract_feature_barcode(read2.seq, feature_blen, feature_type, feature_barcode);
+			if (valid_feature) {
+				binary_feature = barcode_to_binary(feature_barcode);
+				feature_iter = feature_index.find(binary_feature);
+				valid_feature = feature_iter != feature_index.end() && feature_iter->second.item_id >= 0;				
+			}
+
+			n_valid_cell_ += valid_cell;
+			n_valid_feature_ += valid_feature;
+
+			if (valid_cell && valid_feature) {
+				++n_valid_;
+				read1_len = read1.seq.length();
+				if (read1_len < cell_blen + umi_len) {
+					printf("Warning: Processing thread %d detected read1 length %d is smaller than cell barcode length %d + UMI length %d. Shorten UMI length to %d!\n", thread_id, read1_len, cell_blen, umi_len, read1_len - cell_blen);
+					umi_len = read1_len - cell_blen;
+				}
+				umi = safe_substr(read1.seq, cell_blen, umi_len);
+				binary_umi = barcode_to_binary(umi);
+
+				cell_id = cell_iter->second.item_id;
+				feature_id = feature_iter->second.item_id;
+				collector_pos = detected_ftype ? feature_categories[feature_id] : 0;
+				buffer[collector_pos].emplace_back(cell_id, binary_umi, feature_id);
+			}
+		}
+
+		for (int i = 0; i < n_cat; ++i) {
+			auto& dataCollector = dataCollectors[i];
+			collector_locks[i]->lock();
+			for (auto& r : buffer[i]) dataCollector.insert(r.cell_id, r.umi, r.feature_id);
+			collector_locks[i]->unlock();
+		}
+
+		cnt += cnt_;
+		n_valid += n_valid_;
+		n_valid_cell += n_valid_cell_;
+		n_valid_feature += n_valid_feature_;
+
+		if (cnt - prev_cnt >= 1000000) {
+			printf("Processed %d reads.\n", cnt.load());
+			prev_cnt = cnt.load();
+		}
 	}
 }
 
@@ -262,7 +354,7 @@ int main(int argc, char* argv[]) {
 		printf("\tfastq_folders\tfolder containing all R1 and R2 FASTQ files ending with 001.fastq.gz .\n");
 		printf("\toutput_name\toutput file name prefix.\n");
 		printf("Options:\n");
-		printf("\t-p #\tnumber of threads. [default: 1]\n");
+		printf("\t-p #\tnumber of threads. This number should be >= 2. [default: 2]\n");
 		printf("\t--max-mismatch-cell #\tmaximum number of mismatches allowed for cell barcodes. [default: 0]\n");
 		printf("\t--feature feature_type\tfeature type can be either antibody or crispr. [default: antibody]\n");
 		printf("\t--max-mismatch-feature #\tmaximum number of mismatches allowed for feature barcodes. [default: 2]\n");
@@ -277,9 +369,9 @@ int main(int argc, char* argv[]) {
 		exit(-1);
 	}
 
-	start_time = time(NULL);
+	start_ = time(NULL);
 
-	n_threads = 1;
+	n_threads = 2;
 	max_mismatch_cell = 1;
 	feature_type = "antibody";
 	max_mismatch_feature = 3;
@@ -318,7 +410,7 @@ int main(int argc, char* argv[]) {
 
 	printf("Load feature barcodes.\n");
 	parse_sample_sheet(argv[2], n_feature, feature_blen, feature_index, feature_names, max_mismatch_feature);
-	parse_feature_names(n_feature, feature_names, n_cat, cat_names, cat_nfs, feature_categories);
+	detected_ftype = parse_feature_names(n_feature, feature_names, n_cat, cat_names, cat_nfs, feature_categories);
 
 	parse_input_directory(argv[3]);
 
@@ -333,61 +425,40 @@ int main(int argc, char* argv[]) {
 		if (barcode_pos < 0) barcode_pos = 0; // default is 0
 	}
 
+	interim_ = time(NULL);
 	printf("Load cell barcodes.\n");
 	convert_cell_barcode = convert_cell_barcode || (feature_type == "antibody" && totalseq_type == "TotalSeq-B");
 	parse_sample_sheet(argv[1], n_cell, cell_blen, cell_index, cell_names, max_mismatch_cell, convert_cell_barcode);
-	printf("Time spent on parsing cell barcodes = %.2fs.\n", difftime(time(NULL), start_time));
+	end_ = time(NULL);
+	printf("Time spent on parsing cell barcodes = %.2fs.\n", difftime(end_, interim_));
 
-	int cnt = 0, n_valid = 0, n_valid_cell = 0, n_valid_feature = 0; // cnt: total number of reads; n_valid, reads with valid cell barcode and feature barcode; n_valid_cell, reads with valid cell barcode; n_valid_feature, reads with valid feature barcode
-	string cell_barcode, umi, feature_barcode;
-	uint64_t binary_cell, binary_umi, binary_feature;
-	int read1_len;
-	int feature_id, collector_pos;
-	bool valid_cell, valid_feature;
+	interim_ = end_;
 
-	dataCollectors.resize(n_cat > 0 ? n_cat : 1);
+	int np = min(max(1, n_threads / 3), (int)inputs.size());
+	int nt = np * 2;
 
-	for (auto&& input_fastq : inputs) {
-		iGZipFile gzip_in_r1(input_fastq.input_r1);
-		iGZipFile gzip_in_r2(input_fastq.input_r2);
-		while (gzip_in_r1.next(read1) && gzip_in_r2.next(read2)) {
-			++cnt;
+	dataCollectors.resize(n_cat);
+	result_buffer.resize(nt);
+	for (int i = 0; i < nt; ++i) result_buffer[i].resize(n_cat);
+	for (int i = 0; i < n_cat; ++i) collector_locks.emplace_back(new mutex());
 
-			cell_barcode = safe_substr(read1.seq, 0, cell_blen);
-			binary_cell = barcode_to_binary(cell_barcode);
-			cell_iter = cell_index.find(binary_cell);
-			valid_cell = cell_iter != cell_index.end() && cell_iter->second.item_id >= 0;
+	cnt = 0; prev_cnt = 0;
+	n_valid = 0;
+	n_valid_cell =0 ;
+	n_valid_feature = 0;
 
-			valid_feature = extract_feature_barcode(read2.seq, feature_blen, feature_type, feature_barcode);
-			if (valid_feature) {
-				binary_feature = barcode_to_binary(feature_barcode);
-				feature_iter = feature_index.find(binary_feature);
-				valid_feature = feature_iter != feature_index.end() && feature_iter->second.item_id >= 0;				
-			}
+	ReadParser *parser = new ReadParser(inputs, nt, np);
 
-			n_valid_cell += valid_cell;
-			n_valid_feature += valid_feature;
+	for (int i = 0; i < nt; ++i)
+		processingThreads_.emplace_back([parser, i](){ process_reads(parser, i); });
 
-			if (valid_cell && valid_feature) {
-				++n_valid;
-				read1_len = read1.seq.length();
-				if (read1_len < cell_blen + umi_len) {
-					printf("Warning: Detected read1 length %d is smaller than cell barcode length %d + UMI length %d. Shorten UMI length to %d!\n", read1_len, cell_blen, umi_len, read1_len - cell_blen);
-					umi_len = read1_len - cell_blen;
-				}
-				umi = safe_substr(read1.seq, cell_blen, umi_len);
-				binary_umi = barcode_to_binary(umi);
+	for (auto& thread : processingThreads_) thread.join();
+	delete parser;
+	result_buffer.clear();
 
-				feature_id = feature_iter->second.item_id;
-				collector_pos = n_cat > 0 ? feature_categories[feature_id] : 0;
-				dataCollectors[collector_pos].insert(cell_iter->second.item_id, binary_umi, feature_id);
-			}
-
-			if (cnt % 1000000 == 0) printf("Processed %d reads.\n", cnt);
-		}
-	}
-
-	printf("Parsing input data is finished.\n");
+	end_ = time(NULL);
+	printf("Parsing input data is finished. %d reads are processed. Time spent = %.2fs.\n", cnt.load(), difftime(end_, interim_));
+	interim_ = end_;
 
 	string output_name = argv[4];
 	ofstream fout;
@@ -398,7 +469,7 @@ int main(int argc, char* argv[]) {
 	fout<< "Number of reads with valid feature barcodes: "<< n_valid_feature<< " ("<< fixed<< setprecision(2)<< n_valid_feature * 100.0 / cnt << "%)"<< endl;
 	fout<< "Number of reads with valid cell and feature barcodes: "<< n_valid<< " ("<< fixed<< setprecision(2)<< n_valid * 100.0 / cnt << "%)"<< endl;
 
-	if (n_cat == 0)
+	if (!detected_ftype)
 		dataCollectors[0].output(output_name, feature_type, 0, n_feature, cell_names, umi_len, feature_names, fout, n_threads);
 	else
 		for (int i = 0; i < n_cat; ++i) {
@@ -408,8 +479,11 @@ int main(int argc, char* argv[]) {
 	fout.close();
 
 	printf("%s.report.txt is written.\n", output_name.c_str());
-	end_time = time(NULL);
-	printf("Time spent = %.2fs.\n", difftime(end_time, start_time));
+	
+	end_ = time(NULL);
+	printf("Outputs are written. Time spent = %.2fs.\n", difftime(end_, interim_));
+	
+	printf("Total time spent (not including destruct objects) = %.2fs.\n", difftime(end_, start_));
 
 	return 0;
 }
