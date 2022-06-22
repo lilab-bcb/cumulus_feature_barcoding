@@ -35,7 +35,7 @@ string feature_type, totalseq_type, scaffold_sequence;
 int barcode_pos; // Antibody: Total-Seq A 0; Total-Seq B or C 10. Crispr: default 0, can be set by option
 bool convert_cell_barcode;
 
-time_t start_time, end_time;
+time_t start_, interim_, end_;
 
 vector<vector<string>> inputs;
 
@@ -350,7 +350,7 @@ void process_reads(ReadParser *parser, int thread_id) {
 
 int main(int argc, char* argv[]) {
 	if (argc < 5) {
-		printf("Usage: generate_count_matrix_ADTs cell_barcodes.txt[.gz] feature_barcodes.csv fastq_folders output_name [-p #] [--max-mismatch-cell #] [--feature feature_type] [--max-mismatch-feature #] [--umi-length len] [--barcode-pos #] [--convert-cell-barcode] [--scaffold-sequence sequence]\n");
+		printf("Usage: generate_count_matrix_ADTs cell_barcodes.txt[.gz] feature_barcodes.csv fastq_folders output_name [-p #] [--max-mismatch-cell #] [--feature feature_type] [--max-mismatch-feature #] [--umi-length len] [--barcode-pos #] [--convert-cell-barcode] [--scaffold-sequence sequence] [--chunk chunk_size]\n");
 		printf("Arguments:\n\tcell_barcodes.txt[.gz]\t10x genomics barcode white list, either gzipped or not.\n");
 		printf("\tfeature_barcodes.csv\tfeature barcode file;barcode,feature_name[,feature_category]. Optional feature_category is required only if hashing and citeseq data share the same sample index.\n");
 		printf("\tfastq_folders\tfolder containing all R1 and R2 FASTQ files ending with 001.fastq.gz .\n");
@@ -371,7 +371,7 @@ int main(int argc, char* argv[]) {
 		exit(-1);
 	}
 
-	start_time = time(NULL);
+	start_ = time(NULL);
 
 	n_threads = 2;
 	max_mismatch_cell = 1;
@@ -382,6 +382,8 @@ int main(int argc, char* argv[]) {
 	totalseq_type = "";
 	scaffold_sequence = "";
 	convert_cell_barcode = false;
+
+	size_t chunk_size = 100000;
 
 	for (int i = 5; i < argc; ++i) {
 		if (!strcmp(argv[i], "-p")) {
@@ -408,6 +410,11 @@ int main(int argc, char* argv[]) {
 		if (!strcmp(argv[i], "--scaffold-sequence")) {
 			scaffold_sequence = argv[i + 1];
 		}
+
+		if (!strcmp(argv[i], "--chunk")) {
+			chunk_size = atoi(argv[i+1]);
+		}
+
 	}
 
 	printf("Load feature barcodes.\n");
@@ -427,10 +434,14 @@ int main(int argc, char* argv[]) {
 		if (barcode_pos < 0) barcode_pos = 0; // default is 0
 	}
 
+	interim_ = time(NULL);
 	printf("Load cell barcodes.\n");
 	convert_cell_barcode = convert_cell_barcode || (feature_type == "antibody" && totalseq_type == "TotalSeq-B");
 	parse_sample_sheet(argv[1], n_cell, cell_blen, cell_index, cell_names, max_mismatch_cell, convert_cell_barcode);
-	printf("Time spent on parsing cell barcodes = %.2fs.\n", difftime(time(NULL), start_time));
+	end_ = time(NULL);
+	printf("Time spent on parsing cell barcodes = %.2fs.\n", difftime(end_, interim_));
+
+	interim_ = end_;
 
 	int np, nt;
 
@@ -447,7 +458,7 @@ int main(int argc, char* argv[]) {
 	n_valid_cell =0 ;
 	n_valid_feature = 0;
 
-	ReadParser *parser = new ReadParser(inputs, nt, np);
+	ReadParser *parser = new ReadParser(inputs, nt, np, chunk_size);
 
 	for (int i = 0; i < nt; ++i)
 		processingThreads_.emplace_back([parser, i](){ process_reads(parser, i); });
@@ -456,7 +467,9 @@ int main(int argc, char* argv[]) {
 	delete parser;
 	result_buffer.clear();
 
-	printf("Parsing input data is finished.\n");
+	end_ = time(NULL);
+	printf("Parsing input data is finished. Time spent = %.2fs.\n", difftime(end_, interim_));
+	interim_ = end_;
 
 	string output_name = argv[4];
 	ofstream fout;
@@ -477,8 +490,11 @@ int main(int argc, char* argv[]) {
 	fout.close();
 
 	printf("%s.report.txt is written.\n", output_name.c_str());
-	end_time = time(NULL);
-	printf("Time spent = %.2fs.\n", difftime(end_time, start_time));
+	
+	end_ = time(NULL);
+	printf("Outputs are written. Time spent = %.2fs", difftime(end_, interim_));
+	
+	printf("Total time spent (not including destruct objects) = %.2fs.\n", difftime(end_, start_));
 
 	return 0;
 }
