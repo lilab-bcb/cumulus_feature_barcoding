@@ -28,7 +28,7 @@ const int totalseq_A_pos = 0;
 const int totalseq_BC_pos = 10;
 
 
-atomic<int> cnt, n_valid, n_valid_cell, n_valid_feature; // cnt: total number of reads; n_valid, reads with valid cell barcode and feature barcode; n_valid_cell, reads with valid cell barcode; n_valid_feature, reads with valid feature barcode
+atomic<int> cnt, n_valid, n_valid_cell, n_valid_feature, prev_cnt; // cnt: total number of reads; n_valid, reads with valid cell barcode and feature barcode; n_valid_cell, reads with valid cell barcode; n_valid_feature, reads with valid feature barcode; prev_cnt: for printing # of reads processed purpose
 
 int n_threads, max_mismatch_cell, max_mismatch_feature, umi_len;
 string feature_type, totalseq_type, scaffold_sequence;
@@ -281,7 +281,6 @@ void process_reads(ReadParser *parser, int thread_id) {
 	HashIterType cell_iter, feature_iter;
 
 	int cnt_, n_valid_, n_valid_cell_, n_valid_feature_;
-	int delta_inc = 0; // counter for printing
 
 	auto& buffer = result_buffer[thread_id];
 
@@ -339,10 +338,9 @@ void process_reads(ReadParser *parser, int thread_id) {
 		n_valid_cell += n_valid_cell_;
 		n_valid_feature += n_valid_feature_;
 
-		delta_inc += cnt_;
-		if (delta_inc >= 1000000) {
+		if (cnt - prev_cnt >= 1000000) {
 			printf("Processed %d reads.\n", cnt.load());
-			delta_inc = 0;
+			prev_cnt = cnt.load();
 		}
 	}
 }
@@ -436,16 +434,15 @@ int main(int argc, char* argv[]) {
 
 	interim_ = end_;
 
-	// int np = min(max(1, n_threads / 3), inputs.size());
-	// int nt = np * 2;
-	int np = 2, nt = n_threads - np;
+	int np = min(max(1, n_threads / 3), (int)inputs.size());
+	int nt = np * 2;
 
 	dataCollectors.resize(n_cat);
 	result_buffer.resize(nt);
 	for (int i = 0; i < nt; ++i) result_buffer[i].resize(n_cat);
 	for (int i = 0; i < n_cat; ++i) collector_locks.emplace_back(new mutex());
 
-	cnt = 0;
+	cnt = 0; prev_cnt = 0;
 	n_valid = 0;
 	n_valid_cell =0 ;
 	n_valid_feature = 0;
@@ -460,7 +457,7 @@ int main(int argc, char* argv[]) {
 	result_buffer.clear();
 
 	end_ = time(NULL);
-	printf("Parsing input data is finished. Time spent = %.2fs.\n", difftime(end_, interim_));
+	printf("Parsing input data is finished. %d reads are processed. Time spent = %.2fs.\n", cnt.load(), difftime(end_, interim_));
 	interim_ = end_;
 
 	string output_name = argv[4];
