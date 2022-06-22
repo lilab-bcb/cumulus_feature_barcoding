@@ -469,7 +469,7 @@ int main(int argc, char* argv[]) {
 	fout<< "Number of reads with valid feature barcodes: "<< n_valid_feature<< " ("<< fixed<< setprecision(2)<< n_valid_feature * 100.0 / cnt << "%)"<< endl;
 	fout<< "Number of reads with valid cell and feature barcodes: "<< n_valid<< " ("<< fixed<< setprecision(2)<< n_valid * 100.0 / cnt << "%)"<< endl;
 
-	if (n_cat == 0)
+	if (!detected_ftype)
 		dataCollectors[0].output(output_name, feature_type, 0, n_feature, cell_names, umi_len, feature_names, fout, n_threads);
 	else
 		for (int i = 0; i < n_cat; ++i) {
