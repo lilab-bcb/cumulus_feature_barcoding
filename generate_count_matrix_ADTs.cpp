@@ -350,7 +350,7 @@ void process_reads(ReadParser *parser, int thread_id) {
 
 int main(int argc, char* argv[]) {
 	if (argc < 5) {
-		printf("Usage: generate_count_matrix_ADTs cell_barcodes.txt[.gz] feature_barcodes.csv fastq_folders output_name [-p #] [--max-mismatch-cell #] [--feature feature_type] [--max-mismatch-feature #] [--umi-length len] [--barcode-pos #] [--convert-cell-barcode] [--scaffold-sequence sequence] [--chunk chunk_size]\n");
+		printf("Usage: generate_count_matrix_ADTs cell_barcodes.txt[.gz] feature_barcodes.csv fastq_folders output_name [-p #] [--max-mismatch-cell #] [--feature feature_type] [--max-mismatch-feature #] [--umi-length len] [--barcode-pos #] [--convert-cell-barcode] [--scaffold-sequence sequence]\n");
 		printf("Arguments:\n\tcell_barcodes.txt[.gz]\t10x genomics barcode white list, either gzipped or not.\n");
 		printf("\tfeature_barcodes.csv\tfeature barcode file;barcode,feature_name[,feature_category]. Optional feature_category is required only if hashing and citeseq data share the same sample index.\n");
 		printf("\tfastq_folders\tfolder containing all R1 and R2 FASTQ files ending with 001.fastq.gz .\n");
@@ -383,8 +383,6 @@ int main(int argc, char* argv[]) {
 	scaffold_sequence = "";
 	convert_cell_barcode = false;
 
-	size_t chunk_size = 100000;
-
 	for (int i = 5; i < argc; ++i) {
 		if (!strcmp(argv[i], "-p")) {
 			n_threads = atoi(argv[i + 1]);
@@ -410,11 +408,6 @@ int main(int argc, char* argv[]) {
 		if (!strcmp(argv[i], "--scaffold-sequence")) {
 			scaffold_sequence = argv[i + 1];
 		}
-
-		if (!strcmp(argv[i], "--chunk")) {
-			chunk_size = atoi(argv[i+1]);
-		}
-
 	}
 
 	printf("Load feature barcodes.\n");
@@ -443,10 +436,9 @@ int main(int argc, char* argv[]) {
 
 	interim_ = end_;
 
-	int np, nt;
-
-	np = 1 ? n_threads <= 4 || inputs.size() == 1 : 2;
-	nt = n_threads - np;
+	// int np = min(max(1, n_threads / 3), inputs.size());
+	// int nt = np * 2;
+	int np = inputs.size(), nt = n_threads - np;
 
 	dataCollectors.resize(n_cat);
 	result_buffer.resize(nt);
@@ -458,7 +450,7 @@ int main(int argc, char* argv[]) {
 	n_valid_cell =0 ;
 	n_valid_feature = 0;
 
-	ReadParser *parser = new ReadParser(inputs, nt, np, chunk_size);
+	ReadParser *parser = new ReadParser(inputs, nt, np);
 
 	for (int i = 0; i < nt; ++i)
 		processingThreads_.emplace_back([parser, i](){ process_reads(parser, i); });
