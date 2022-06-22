@@ -85,14 +85,14 @@ public:
         numParsing_ = 0;
         for (int i = 0; i < numParsers; ++i) {
           ++numParsing_;
-          parsingThreads_.emplace_back(new std::thread([this, i]() {
+          parsingThreads_.emplace_back([this, i]() {
                 this->parse_read_tuples(this->ctSpaceQueue_[i].get(), this->ptReadQueue_[i].get());
-            }));
+            });
         }
     }
 
     ~ReadParser() {
-        for (auto& thread: parsingThreads_) thread->join();
+        for (auto& thread: parsingThreads_) thread.join();
     }
 
     ReadGroup getReadGroup() {
@@ -127,7 +127,7 @@ private:
     std::vector<std::unique_ptr<moodycamel::ProducerToken>> ptReadQueue_;
     std::vector<std::unique_ptr<moodycamel::ConsumerToken>> ctSpaceQueue_;
 
-    std::vector<std::unique_ptr<std::thread>> parsingThreads_;
+    std::vector<std::thread> parsingThreads_;
 
 
     bool load_one_tuple(std::vector<iGZipFile>& input_streams, ReadTuple *rt) {
