@@ -492,7 +492,7 @@ int main(int argc, char* argv[]) {
 	printf("%s.report.txt is written.\n", output_name.c_str());
 	
 	end_ = time(NULL);
-	printf("Outputs are written. Time spent = %.2fs", difftime(end_, interim_));
+	printf("Outputs are written. Time spent = %.2fs.\n", difftime(end_, interim_));
 	
 	printf("Total time spent (not including destruct objects) = %.2fs.\n", difftime(end_, start_));
 
