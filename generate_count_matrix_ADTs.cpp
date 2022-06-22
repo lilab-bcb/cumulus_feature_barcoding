@@ -438,7 +438,7 @@ int main(int argc, char* argv[]) {
 
 	// int np = min(max(1, n_threads / 3), inputs.size());
 	// int nt = np * 2;
-	int np = inputs.size(), nt = n_threads - np;
+	int np = 2, nt = n_threads - np;
 
 	dataCollectors.resize(n_cat);
 	result_buffer.resize(nt);
