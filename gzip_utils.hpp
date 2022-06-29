@@ -104,7 +104,7 @@ struct oGZipFile {
 	FILE *fo = nullptr;
 	Compressor *compressor = nullptr;
 
-	oGZipFile(const std::string& output_file, int num_threads = 1, size_t buffer_size = compressor_buffer_size, int compression_level = 6) {
+	oGZipFile(const std::string& output_file, int num_threads = 1, bool bgzf = false, size_t buffer_size = compressor_buffer_size, int compression_level = 6) {
 		fo = fopen(output_file.c_str(), "wb");
 		if (fo == nullptr) {
 			printf("Cannot creat output file %s!\n", output_file.c_str());
@@ -114,10 +114,10 @@ struct oGZipFile {
 		assert(num_threads >= 1);
 		compressor = nullptr;
 		if (num_threads == 1) {
-			compressor = new SingleThreadCompressor(buffer_size, compression_level);
+			compressor = new SingleThreadCompressor(buffer_size, compression_level, bgzf);
 		} 
 		else {
-			compressor = new MultiThreadsCompressor(num_threads, buffer_size, compression_level);
+			compressor = new MultiThreadsCompressor(num_threads, buffer_size, compression_level, bgzf);
 		}
 	}
 
@@ -134,7 +134,7 @@ struct oGZipFile {
 
 	void close() {
 		if (fo != nullptr) {
-			flush();
+			flush(true);
 			fclose(fo);
 			delete compressor;
 			fo = nullptr;
@@ -142,9 +142,9 @@ struct oGZipFile {
 		}
 	}
 
-	void flush() {
+	void flush(bool last_flush = false) {
 		size_t cprs_size = compressor->compress();
-		if (cprs_size > 0) compressor->flushOut(fo, cprs_size);
+		compressor->flushOut(fo, cprs_size, last_flush);
 	}
 
 	void write(const Read& aread) {
