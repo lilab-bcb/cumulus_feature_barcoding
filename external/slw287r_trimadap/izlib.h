@@ -7,7 +7,6 @@
 #include <inttypes.h>
 #include <sys/stat.h>
 #include <isa-l/igzip_lib.h>
-// #include "igzip_lib.h"
 
 #ifndef UNIX
 #define UNIX 3
@@ -61,6 +60,7 @@ extern "C" {
 #endif
 int is_gz(FILE* fp);
 uint32_t get_posix_filetime(FILE* fp);
+int ingest_gzip_header(gzFile fp);
 gzFile gzopen(const char *in, const char *mode);
 gzFile gzdopen(int fd, const char *mode);
 int gzread(gzFile fp, void *buf, size_t len);
@@ -79,11 +79,11 @@ int is_gz(FILE* fp)
 	int gzip = 0;
 	if(fread(buf, 1, 2, fp) == 2)
 		if(((int)buf[0] == 0x1f) && ((int)(buf[1]&0xFF) == 0x8b))
-			gzip = 1;
+			gzip = 1; // normal gzip
 	fseek(fp, 12, SEEK_SET);
 	if(fread(buf, 1, 2, fp) == 2)
-		if((int)buf[0] == 0x42 && (int)(buf[1]&0xFF) == 0x43)
-			gzip = 2;
+		if(gzip == 1 && (int)buf[0] == 0x42 && (int)(buf[1]&0xFF) == 0x43)
+			gzip = 2; // bgzf format, need to require the normal gzip header
 	fseek(fp, 0, SEEK_SET);
 	return gzip;
 }
@@ -93,6 +93,17 @@ uint32_t get_posix_filetime(FILE* fp)
 	struct stat file_stats;
 	fstat(fileno(fp), &file_stats);
 	return file_stats.st_mtime;
+}
+
+int ingest_gzip_header(gzFile fp) {
+	// assume fp->state->avail_in > 0
+	int status = isal_read_gzip_header(fp->state, fp->gzip_header);
+	while (status == ISAL_END_INPUT && !feof(fp->fp)) {
+		fp->state->next_in = fp->buf_in;
+		fp->state->avail_in = fread(fp->state->next_in, 1, fp->buf_in_size, fp->fp);
+		status = isal_read_gzip_header(fp->state, fp->gzip_header);
+	}
+	return status;
 }
 
 gzFile gzopen(const char *in, const char *mode)
@@ -120,7 +131,7 @@ gzFile gzopen(const char *in, const char *mode)
 		fp->state->crc_flag = ISAL_GZIP_NO_HDR_VER;
 		fp->state->next_in = fp->buf_in;
 		fp->state->avail_in = fread(fp->state->next_in, 1, fp->buf_in_size, fp->fp);
-		if(isal_read_gzip_header(fp->state, fp->gzip_header) != ISAL_DECOMP_OK)
+		if (ingest_gzip_header(fp) != ISAL_DECOMP_OK)
 		{
 			gzclose(fp);
 			return NULL;
@@ -181,7 +192,7 @@ gzFile gzdopen(int fd, const char *mode)
 		fp->state->crc_flag = ISAL_GZIP_NO_HDR_VER;
 		fp->state->next_in = fp->buf_in;
 		fp->state->avail_in = fread(fp->state->next_in, 1, fp->buf_in_size, fp->fp);
-		if(isal_read_gzip_header(fp->state, fp->gzip_header) != ISAL_DECOMP_OK)
+		if (ingest_gzip_header(fp) != ISAL_DECOMP_OK)
 		{
 			gzclose(fp);
 			return NULL;
@@ -221,7 +232,9 @@ void gzclose(gzFile fp)
 	if(fp->zstream && fp->fp) gzwrite(fp, NULL, 0);
 	if(fp->gzip_header)
 	{
+		if(fp->gzip_header->extra) free(fp->gzip_header->extra);
 		if(fp->gzip_header->name) free(fp->gzip_header->name);
+		if(fp->gzip_header->comment) free(fp->gzip_header->comment);
 		free(fp->gzip_header);
 	}
 	if(fp->state) free(fp->state);
@@ -246,7 +259,7 @@ int gzread(gzFile fp, void *buf, size_t len)
 	}
 	do // Start reading in compressed data and decompress
 	{
-		if (!fp->state->avail_in)
+		if (!feof(fp->fp) && !fp->state->avail_in)
 		{
 			fp->state->next_in = fp->buf_in;
 			fp->state->avail_in = fread(fp->state->next_in, 1, fp->buf_in_size, fp->fp);
@@ -272,7 +285,9 @@ int gzread(gzFile fp, void *buf, size_t len)
 		if (fp->state->avail_in > 1 && fp->state->next_in[1] != 139) // 0x8b
 			break;
 		isal_inflate_reset(fp->state);
-		fp->state->crc_flag = ISAL_GZIP; // Let isal_inflate() process extra headers
+		isal_gzip_header_init(fp->gzip_header);
+		fp->state->crc_flag = ISAL_GZIP_NO_HDR_VER;
+		if (ingest_gzip_header(fp) != ISAL_DECOMP_OK) return -3; // fail to parse header
 		do
 		{
 			if (!feof(fp->fp) && !fp->state->avail_in)
@@ -284,7 +299,7 @@ int gzread(gzFile fp, void *buf, size_t len)
 			fp->state->avail_out = len;
 			if (isal_inflate(fp->state) != ISAL_DECOMP_OK)
 				return -3;
-			if((buf_data_len = fp->state->next_out - (uint8_t *)buf))
+			if ((buf_data_len = fp->state->next_out - (uint8_t *)buf))
 				return buf_data_len;
 		} while (fp->state->block_state != ISAL_BLOCK_FINISH
 				&& (!feof(fp->fp) || !fp->state->avail_out));
