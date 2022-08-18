@@ -130,15 +130,28 @@ private:
     std::vector<std::thread> parsingThreads_;
 
 
-    bool load_one_tuple(std::vector<iGZipFile>& input_streams, ReadTuple *rt) {
+    int load_one_tuple(std::vector<iGZipFile>& input_streams, ReadTuple *rt) {
         int cnt = 0;
         for (int i = 0; i < n_mates_; ++i)
             cnt += input_streams[i].next((*rt)[i]);
-        if (cnt > 0 && cnt != n_mates_) {
-            printf("Detected mate files with different number of lines!\n");
-            exit(-1);
+        return cnt;
+    }
+
+    bool check_error(int file_cnt, int n_load, std::vector<iGZipFile>& input_streams) {
+        int n_err = 0;
+        for (int i = 0; i < n_mates_; ++i) {
+            n_err += input_streams[i].check_error(file_cnt);
         }
-        return cnt > 0;
+        if (n_err > 0) return true;
+
+        if (n_load > 0 && n_load != n_mates_) {    
+            printf("Detected mate files with different number of reads! The following files reached end of file with %d reads while other files are not:\n", file_cnt);
+            for (int i = 0; i < n_mates_; ++i)
+                if (input_streams[i].eof()) printf("  %s\n", input_streams[i].get_input_file().c_str());
+            return true;
+        }
+
+        return false;
     }
 
     void parse_read_tuples(moodycamel::ConsumerToken* ctSpace, moodycamel::ProducerToken* ptRead) {
@@ -155,14 +168,16 @@ private:
         cur_size = 0;
         rt = &((*buffer)[cur_size]);
 
+        int n_load, file_cnt;
         while (fileQueue_.try_dequeue(fid)) {
             // prepare input gzip "streams"
             input_streams.clear();
             for (int i = 0; i < n_mates_; ++i) input_streams.emplace_back(input_files_[fid][i]);
 
             // load read tuples
-            while (load_one_tuple(input_streams, rt)) {
-                ++cur_size;
+            file_cnt = 0;
+            while (n_load = load_one_tuple(input_streams, rt), n_load == n_mates_) {
+                ++cur_size; ++file_cnt;
                 if (cur_size == chunkSize_) {
                     buffer->nreads = cur_size;
                     curMaxDelay = MIN_BACKOFF_ITERS;
@@ -173,6 +188,7 @@ private:
                 }
                 rt = &((*buffer)[cur_size]);
             }
+            if (check_error(file_cnt, n_load, input_streams)) exit(-1);
         }
 
         if (cur_size > 0) {

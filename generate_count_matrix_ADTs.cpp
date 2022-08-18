@@ -372,10 +372,10 @@ int main(int argc, char* argv[]) {
 	start_ = time(NULL);
 
 	n_threads = 2;
-	max_mismatch_cell = 1;
+	max_mismatch_cell = 0;
 	feature_type = "antibody";
-	max_mismatch_feature = 3;
-	umi_len = 10;
+	max_mismatch_feature = 2;
+	umi_len = 12;
 	barcode_pos = -1;
 	totalseq_type = "";
 	scaffold_sequence = "";
