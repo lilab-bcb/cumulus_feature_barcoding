@@ -66,10 +66,10 @@ struct iGZipFile {
 		int length = kseq_read(sequence_kseq);
 
 		if (length > 0) {
-			aread.name = sequence_kseq->name.s;
-			aread.comment = sequence_kseq->comment.s;
-			aread.seq = sequence_kseq->seq.s;
-			aread.qual = sequence_kseq->is_fastq ? sequence_kseq->qual.s : "";
+			aread.name = sequence_kseq->name.l > 0 ? sequence_kseq->name.s : "";
+			aread.comment = sequence_kseq->comment.l > 0 ? sequence_kseq->comment.s : "";
+			aread.seq = sequence_kseq->seq.l > 0 ? sequence_kseq->seq.s : "";
+			aread.qual = sequence_kseq->is_fastq && sequence_kseq->qual.l > 0 ? sequence_kseq->qual.s : "";
 			return true;
 		}
 
