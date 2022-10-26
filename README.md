@@ -14,6 +14,8 @@ The installation has been tested on Debian and Ubuntu Linux.
 sudo apt install build-essential git libisal2 libisal-dev libdeflate0 libdeflate-dev
 ```
 
+**Important:** Make sure to install `libisal2` and `libisal-dev` version 2.30.0 or later.
+
 2. Check out this repository via Git:
 
 ```
