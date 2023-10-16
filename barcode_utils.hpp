@@ -135,6 +135,24 @@ inline void mutate_index(HashType& index_dict, uint64_t binary_id, int len, int 
 	}
 }
 
+inline void ltrim(std::string &s) {
+    s.erase(s.begin(), std::find_if(s.begin(), s.end(), [](unsigned char ch) {
+        return !std::isspace(ch);
+    }));
+}
+
+inline void rtrim(std::string& s) {
+    s.erase(std::find_if(s.rbegin(), s.rend(), [](unsigned char ch) {
+        return !std::isspace(ch);
+    }).base(), s.end());
+}
+
+// trim from both ends (in place)
+inline void trim(std::string &s) {
+    rtrim(s);
+    ltrim(s);
+}
+
 inline void parse_one_line(const std::string& line, int& n_barcodes, int& barcode_len, HashType& index_dict, std::vector<std::string>& index_names, int max_mismatch, bool convert_cell_barcode) {
 	std::string index_name, index_seq;
 	std::size_t pos;
@@ -143,7 +161,7 @@ inline void parse_one_line(const std::string& line, int& n_barcodes, int& barcod
 
 	pos = line.find_first_of(',');
 
-	if (pos != std::string::npos) { index_seq = line.substr(0, pos); index_name = line.substr(pos + 1); }
+	if (pos != std::string::npos) { index_seq = line.substr(0, pos); trim(index_seq); index_name = line.substr(pos + 1); trim(index_name); }
 	else { index_seq = line; index_name = line; }
 
 	if (barcode_len == 0) barcode_len = index_seq.length();
@@ -160,7 +178,7 @@ inline void parse_one_line(const std::string& line, int& n_barcodes, int& barcod
 	else mutate_index(index_dict, barcode_to_binary(index_seq), index_seq.length(), n_barcodes, max_mismatch, 0, 0);
 
 	index_names.push_back(index_name);
-	++n_barcodes;	
+	++n_barcodes;
 }
 
 
