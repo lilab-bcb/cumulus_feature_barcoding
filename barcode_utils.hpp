@@ -161,7 +161,7 @@ inline void parse_one_line(const std::string& line, int& n_barcodes, int& barcod
 
 	pos = line.find_first_of(',');
 
-	if (pos != std::string::npos) { index_seq = line.substr(0, pos); index_name = line.substr(pos + 1); trim(index_name); }
+	if (pos != std::string::npos) { index_seq = line.substr(0, pos); trim(index_seq); index_name = line.substr(pos + 1); trim(index_name); }
 	else { index_seq = line; index_name = line; }
 
 	if (barcode_len == 0) barcode_len = index_seq.length();
