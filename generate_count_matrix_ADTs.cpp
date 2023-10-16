@@ -303,7 +303,7 @@ void process_reads(ReadParser *parser, int thread_id) {
 			if (valid_feature) {
 				binary_feature = barcode_to_binary(feature_barcode);
 				feature_iter = feature_index.find(binary_feature);
-				valid_feature = feature_iter != feature_index.end() && feature_iter->second.item_id >= 0;				
+				valid_feature = feature_iter != feature_index.end() && feature_iter->second.item_id >= 0;
 			}
 
 			n_valid_cell_ += valid_cell;
@@ -479,10 +479,10 @@ int main(int argc, char* argv[]) {
 	fout.close();
 
 	printf("%s.report.txt is written.\n", output_name.c_str());
-	
+
 	end_ = time(NULL);
 	printf("Outputs are written. Time spent = %.2fs.\n", difftime(end_, interim_));
-	
+
 	printf("Total time spent (not including destruct objects) = %.2fs.\n", difftime(end_, start_));
 
 	return 0;
