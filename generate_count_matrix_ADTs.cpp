@@ -410,14 +410,9 @@ int main(int argc, char* argv[]) {
 
 	printf("Load feature barcodes.\n");
 	parse_sample_sheet(argv[2], n_feature, feature_blen, feature_index, feature_names, max_mismatch_feature);
-	// Sort feature_names if modality column presents
-	if (!feature_names.empty() && feature_names[0].find_first_of(',') != string::npos) {
-		sort(feature_names.begin(), feature_names.end(),
-			[](string s1, string s2) {
-				return s1.substr(s1.find_first_of(',') + 1) < s2.substr(s2.find_first_of(',') + 1);
-			}
-		);
-	}
+	// Sort feature_names and reindex feature_index if modality column presents
+	if (!feature_names.empty() && feature_names[0].find_first_of(',') != string::npos)
+		group_by_modality(feature_index, feature_names);
 	detected_ftype = parse_feature_names(n_feature, feature_names, n_cat, cat_names, cat_nfs, feature_categories);
 
 	parse_input_directory(argv[3]);
