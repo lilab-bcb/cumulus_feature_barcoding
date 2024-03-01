@@ -8,6 +8,8 @@
 #include <fstream>
 #include <vector>
 #include <unordered_map>
+#include <algorithm>
+#include <numeric>
 
 struct ValueType {
 	int item_id;
@@ -151,6 +153,38 @@ inline void rtrim(std::string& s) {
 inline void trim(std::string &s) {
     rtrim(s);
     ltrim(s);
+}
+
+inline void group_by_modality(HashType& index_dict, std::vector<std::string>& index_names) {
+	std::vector<int> indices(index_names.size());
+	std::iota(indices.begin(), indices.end(), 0);
+	std::sort(indices.begin(), indices.end(),
+		[&index_names](int l, int r) {
+			std::string s1 = index_names[l];
+			std::string s2 = index_names[r];
+			return s1.substr(s1.find_first_of(',') + 1) < s2.substr(s2.find_first_of(',') + 1);
+		}
+	);
+
+	bool already_sorted = true;
+	for (int i = 0; i < indices.size(); ++i)
+		if (indices[i] != i) {
+			already_sorted = false;
+			break;
+		}
+
+	// No action if barcodes are already grouped by modality column
+	if (already_sorted) return;
+
+	std::vector<int> idx_map(indices.size(), -1);
+	std::vector<std::string> tmp_names(index_names);
+	for (int i = 0; i < indices.size(); ++i) {
+		idx_map[indices[i]] = i;
+		index_names[i] = tmp_names[indices[i]];
+	}
+	for (auto iter = index_dict.begin(); iter != index_dict.end(); ++iter) {
+		iter->second.item_id = idx_map[iter->second.item_id];
+	}
 }
 
 inline void parse_one_line(const std::string& line, int& n_barcodes, int& barcode_len, HashType& index_dict, std::vector<std::string>& index_names, int max_mismatch, bool convert_cell_barcode) {
