@@ -114,6 +114,11 @@ void parse_input_directory(char* input_dirs) {
 
 		input_dir = strtok(NULL, ",");
 	}
+
+	if (inputs.empty()) {
+		printf("No FASTQ file found in input folder(s): \"%s\"!\n", input_dirs);
+		exit(-1);
+	}
 }
 
 

@@ -196,7 +196,9 @@ inline void parse_one_line(const std::string& line, int& n_barcodes, int& barcod
 	pos = line.find_first_of(',');
 
 	if (pos != std::string::npos) { index_seq = line.substr(0, pos); trim(index_seq); index_name = line.substr(pos + 1); trim(index_name); }
-	else { index_seq = line; index_name = line; }
+	else { index_seq = line; index_name = line; trim(index_seq); trim(index_name); }
+
+	if (index_seq.empty() && index_name.empty()) return;
 
 	if (barcode_len == 0) barcode_len = index_seq.length();
 	else assert(barcode_len == index_seq.length());
@@ -215,6 +217,18 @@ inline void parse_one_line(const std::string& line, int& n_barcodes, int& barcod
 	++n_barcodes;
 }
 
+inline void skip_bom(std::string& line) {
+	size_t start = 0;
+
+	if (line.length() >= 3 && line.substr(0, 3) == "\xEF\xBB\xBF")   // UTF-8
+		start = 3;
+	else if (line.length() >= 2 && (line.substr(0, 2) == "\xFF\xFE" or line.substr(0, 2) == "\xFE\xFF"))    // UTF-16
+		start = 2;
+	else if (line.length() >= 4 && (line.substr(0, 4) == "\x00\x00\xFE\xFF" or line.substr(0, 4) == "\xFF\xFE\x00\x00"))    // UTF-32
+		start = 4;
+
+	line = line.substr(start);
+}
 
 void parse_sample_sheet(const std::string& sample_sheet_file, int& n_barcodes, int& barcode_len, HashType& index_dict, std::vector<std::string>& index_names, int max_mismatch = 1, bool convert_cell_barcode = false) {
 	std::string line;
@@ -224,13 +238,27 @@ void parse_sample_sheet(const std::string& sample_sheet_file, int& n_barcodes, i
 	index_dict.clear();
 	index_names.clear();
 
+	bool is_first_line = true;
+
 	if (sample_sheet_file.length() > 3 && sample_sheet_file.substr(sample_sheet_file.length() - 3, 3) == ".gz") { // input sample sheet is gzipped
 		iGZipFile gin(sample_sheet_file);
-		while (gin.next(line)) parse_one_line(line, n_barcodes, barcode_len, index_dict, index_names, max_mismatch, convert_cell_barcode);
+		while (gin.next(line)) {
+			if (is_first_line) {
+				skip_bom(line);
+				is_first_line = false;
+			}
+			parse_one_line(line, n_barcodes, barcode_len, index_dict, index_names, max_mismatch, convert_cell_barcode);
+		}
 	}
 	else {
 		std::ifstream fin(sample_sheet_file);
-		while (std::getline(fin, line)) parse_one_line(line, n_barcodes, barcode_len, index_dict, index_names, max_mismatch, convert_cell_barcode);
+		while (std::getline(fin, line)) {
+			if (is_first_line) {
+				skip_bom(line);
+				is_first_line = false;
+			}
+			parse_one_line(line, n_barcodes, barcode_len, index_dict, index_names, max_mismatch, convert_cell_barcode);
+		}
 		fin.close();
 	}
 	printf("%s is parsed. n_barcodes = %d, and barcode_len = %d.\n", sample_sheet_file.c_str(), n_barcodes, barcode_len);
