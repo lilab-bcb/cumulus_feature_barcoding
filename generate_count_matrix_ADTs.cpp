@@ -541,14 +541,14 @@ int main(int argc, char* argv[]) {
 		}
 	}
 
-/*
+
 	printf("Load feature barcodes.\n");
 	parse_sample_sheet(argv[1], n_feature, feature_blen, feature_index, feature_names, max_mismatch_feature);
 	// Sort feature_names and reindex feature_index if modality column presents
 	if (!feature_names.empty() && feature_names[0].find_first_of(',') != string::npos)
 		group_by_modality(feature_index, feature_names);
 	detected_ftype = parse_feature_names(n_feature, feature_names, n_cat, cat_names, cat_nfs, feature_categories);
-*/
+
 	parse_input_directory(argv[2]);
 
 	detect_chemistry();
@@ -589,7 +589,7 @@ int main(int argc, char* argv[]) {
 	end_ = time(NULL);
 	printf("Time spent on parsing cell barcodes = %.2fs.\n", difftime(end_, interim_));
 
-/*
+
 	interim_ = end_;
 
 	int np = min(max(1, n_threads / 3), (int)inputs.size());
@@ -642,7 +642,7 @@ int main(int argc, char* argv[]) {
 	printf("Outputs are written. Time spent = %.2fs.\n", difftime(end_, interim_));
 
 	printf("Total time spent (not including destruct objects) = %.2fs.\n", difftime(end_, start_));
-*/
+
 
 	return 0;
 }
