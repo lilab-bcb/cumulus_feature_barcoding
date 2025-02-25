@@ -2,7 +2,7 @@
 
 [![](https://img.shields.io/github/v/release/lilab-bcb/cumulus_feature_barcoding.svg)](https://github.com/lilab-bcb/cumulus_feature_barcoding/releases)
 
-A fast C++ tool to extract feature-count matrix from sequence reads in FASTQ files. We uses isal-l for decompressing and Heng Li's kseq library for read parsing. It is used by Cumulus for feature-count matrix generation of cell hashing, nucleus hashing, CITE-Seq and Perturb-seq protocols, using either 10x Genomics V2 or V3 chemistry.
+A fast C++ tool to extract feature-count matrix from sequence reads in FASTQ files. We uses isal-l for decompressing and Heng Li's kseq library for read parsing. It is used by Cumulus for feature-count matrix generation of cell hashing, nucleus hashing, CITE-Seq and Perturb-seq protocols, using either 10x Genomics V2, V3 or V4 chemistry.
 
 ## Installation
 
