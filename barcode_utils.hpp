@@ -324,11 +324,11 @@ inline void shallow_parse_one_line(const std::string& line, int& n_barcodes, int
 
 	// Insert into the hashmap
 	binary_id = barcode_to_binary(index_seq);
-	auto it = index_chem_map.find(binary_id);
-	if (it != index_chem_map.end())
-		it->second += ("," + chem_name);
-	else
-		index_chem_map[binary_id] = chem_name;
+	std::pair<std::unordered_map<uint64_t, std::string>::iterator, bool> ret;
+	ret = index_chem_map.insert(std::make_pair(binary_id, chem_name));
+	if (!ret.second) {
+		ret.first->second += ("," + chem_name);
+	}
 }
 
 
