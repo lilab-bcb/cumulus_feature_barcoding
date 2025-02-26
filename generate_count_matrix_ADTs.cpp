@@ -482,7 +482,7 @@ int main(int argc, char* argv[]) {
 		printf("Options:\n");
 		printf("\t-p #\tnumber of threads. This number should be >= 2. [default: 2]\n");
 		printf("\t--chemistry chemistry_type\tchemistry type. [default: auto]\n");
-		printf("\t--cb-dir cb_dir\tAbsolute path to folder containing 10x barcode inclusion list files. [default: /software/barcodes/]\n");
+		printf("\t--cb-dir cb_dir\tAbsolute path to folder containing 10x barcode inclusion list files. [default: ./]\n");
 		printf("\t--max-mismatch-cell #\tmaximum number of mismatches allowed for cell barcodes. [default: auto-decided by chemistry]\n");
 		printf("\t--feature feature_type\tfeature type can be either antibody or crispr. [default: antibody]\n");
 		printf("\t--max-mismatch-feature #\tmaximum number of mismatches allowed for feature barcodes. [default: 2]\n");
@@ -503,7 +503,7 @@ int main(int argc, char* argv[]) {
 	max_mismatch_cell = -1;
 	feature_type = "antibody";
 	max_mismatch_feature = 2;
-	cb_dir = "/software/barcodes/";
+	cb_dir = "./";
 	barcode_pos = -1;
 	totalseq_type = "";
 	scaffold_sequence = "";
