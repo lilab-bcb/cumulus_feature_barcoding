@@ -556,7 +556,7 @@ int main(int argc, char* argv[]) {
 	// Determine UMI length, as well as max_mismatch_cell if not specified
 	umi_len = (chemistry_detected == "10x_v2" || chemistry_detected == "SC3Pv2" || chemistry_detected == "SC5Pv2") ? 10 : 12;
 	if (max_mismatch_cell == -1)
-		max_mismatch_cell = (chemistry_detected == "10x_v2" || chemistry_detected == "SC3Pv2" || chemistry_detected == "SC5Pv2" | chemistry_detected == "multiome") ? 1 : 0;
+		max_mismatch_cell = (chemistry_detected == "10x_v2" || chemistry_detected == "SC3Pv2" || chemistry_detected == "SC5Pv2" || chemistry_detected == "multiome") ? 1 : 0;
 
 	// Determine totalseq_type, as well as barcode_pos if crispr
 	if (chemistry_detected == "SC3Pv3" || chemistry_detected == "SC3Pv4") {
@@ -576,6 +576,7 @@ int main(int argc, char* argv[]) {
 		if (feature_type == "antibody" && barcode_pos < 0)
 			detect_totalseq_type();
 	}
+	printf("TotalSeq type: %s\n", totalseq_type.c_str());
 
 	interim_ = time(NULL);
 	printf("Load cell barcodes.\n");
