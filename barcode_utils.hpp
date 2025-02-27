@@ -187,37 +187,27 @@ inline void group_by_modality(HashType& index_dict, std::vector<std::string>& in
 	}
 }
 
-inline void parse_one_line(const std::string& line, int& n_barcodes, int& barcode_len, HashType& index_dict, std::vector<std::string>& index_names, int max_mismatch, bool convert_cell_barcode) {
+inline void parse_one_line(const std::string& line, int& n_barcodes, int& barcode_len, HashType& index_dict, std::vector<std::string>& index_names, int max_mismatch) {
 	std::string index_name, index_seq;
 	std::size_t pos;
-	bool is_two_col_format = false;
 
 	if (line.empty()) return;
 
-	pos = line.find_first_of(',');
+	std::string delimiters = ",\t";		// Feature barcode file uses ','; Tow-column cell barcode file uses '\t'.
+
+	pos = line.find_first_of(delimiters);
 
 	if (pos != std::string::npos) {
-		// Feature barcode file
+		// Feature barcode file, or two-column cell barcode file
 		index_seq = line.substr(0, pos);
 		trim(index_seq);
 		index_name = line.substr(pos + 1);
 		trim(index_name);
 	} else {
-		// Cell barcode file
-		pos = line.find_first_of('\t');
-		if (pos != std::string::npos) {
-			// Two-column case: Column 0 for CS1, 1 for Poly-A
-			is_two_col_format = true;
-			index_name = line.substr(pos + 1);
-			index_seq = convert_cell_barcode ? line.substr(0, pos) : index_name;
-			trim(index_seq);
-			trim(index_name);
-		} else {
-			// Otherwise
-			index_seq = line;
-			trim(index_seq);
-			index_name = index_seq;
-		}
+		// One-column case
+		index_seq = line;
+		trim(index_seq);
+		index_name = index_seq;
 	}
 
 	if (index_seq.empty() && index_name.empty()) return;
@@ -225,13 +215,6 @@ inline void parse_one_line(const std::string& line, int& n_barcodes, int& barcod
 	if (barcode_len == 0) barcode_len = index_seq.length();
 	else assert(barcode_len == index_seq.length());
 
-	if (convert_cell_barcode && !is_two_col_format) {
-		// One column case
-		pos = barcode_len / 2 - 1;
-		index_seq[pos] = base2rcbase[index_seq[pos]];
-		++pos;
-		index_seq[pos] = base2rcbase[index_seq[pos]];
-	}
 
 	if (max_mismatch == 1) mutate_index_one_mismatch(index_dict, index_seq, n_barcodes);
 	else mutate_index(index_dict, barcode_to_binary(index_seq), index_seq.length(), n_barcodes, max_mismatch, 0, 0);
@@ -253,7 +236,7 @@ inline void skip_bom(std::string& line) {
 	line = line.substr(start);
 }
 
-void parse_sample_sheet(const std::string& sample_sheet_file, int& n_barcodes, int& barcode_len, HashType& index_dict, std::vector<std::string>& index_names, int max_mismatch = 1, bool convert_cell_barcode = false) {
+void parse_sample_sheet(const std::string& sample_sheet_file, int& n_barcodes, int& barcode_len, HashType& index_dict, std::vector<std::string>& index_names, int max_mismatch = 1) {
 	std::string line;
 
 	n_barcodes = 0;
@@ -270,7 +253,7 @@ void parse_sample_sheet(const std::string& sample_sheet_file, int& n_barcodes, i
 				skip_bom(line);
 				is_first_line = false;
 			}
-			parse_one_line(line, n_barcodes, barcode_len, index_dict, index_names, max_mismatch, convert_cell_barcode);
+			parse_one_line(line, n_barcodes, barcode_len, index_dict, index_names, max_mismatch);
 		}
 	}
 	else {
@@ -280,7 +263,7 @@ void parse_sample_sheet(const std::string& sample_sheet_file, int& n_barcodes, i
 				skip_bom(line);
 				is_first_line = false;
 			}
-			parse_one_line(line, n_barcodes, barcode_len, index_dict, index_names, max_mismatch, convert_cell_barcode);
+			parse_one_line(line, n_barcodes, barcode_len, index_dict, index_names, max_mismatch);
 		}
 		fin.close();
 	}
@@ -290,89 +273,6 @@ void parse_sample_sheet(const std::string& sample_sheet_file, int& n_barcodes, i
 	for (auto&& kv : index_dict)
 		if (kv.second.item_id < 0) ++n_amb;
 	printf("In the index, %d out of %d items are ambigious, percentage = %.2f%%.\n", n_amb, (int)index_dict.size(), n_amb * 100.0 / index_dict.size());
-}
-
-
-inline void insert_index_chem_map(std::unordered_map<uint64_t, std::string>& index_chem_map, const std::string& index_seq, const std::string& chemistry) {
-	uint64_t binary_id = barcode_to_binary(index_seq);
-	std::pair<std::unordered_map<uint64_t, std::string>::iterator, bool> ret;
-	ret = index_chem_map.insert(std::make_pair(binary_id, chemistry));
-	if (!ret.second) {
-		ret.first->second += ("," + chemistry);
-	}
-}
-
-
-inline void shallow_parse_one_line(const std::string& line, int& n_barcodes, int& barcode_len, const std::string& chem_name, std::unordered_map<uint64_t, std::string>& index_chem_map) {
-	std::string index_seq, index_seq_cs1;
-	bool has_one_index = true;
-	std::size_t pos;
-
-	if (line.empty()) return;
-
-	pos = line.find_first_of('\t');
-	if (pos != std::string::npos) {
-		// For SC3Pv4
-		index_seq = line.substr(pos + 1);  // Poly-A
-		index_seq_cs1 = line.substr(0, pos);  // CS1
-		trim(index_seq);
-		trim(index_seq_cs1);
-		has_one_index = false;
-	} else {
-		// Otherwise
-		index_seq = line;
-		trim(index_seq);
-	}
-
-	if (barcode_len == 0) barcode_len = index_seq.length();
-	else if (barcode_len != index_seq.length()) {
-		printf("Found an index of seq length %d, while expecting length %d!\n", static_cast<int>(index_seq.length()), barcode_len);
-		exit(-1);
-	}
-
-	if (chem_name == "SC3Pv3") {
-		// For SC3Pv3: convert for CS1
-		index_seq_cs1 = index_seq;
-		pos = barcode_len / 2 - 1;
-		index_seq_cs1[pos] = base2rcbase[index_seq_cs1[pos]];
-		++pos;
-		index_seq_cs1[pos] = base2rcbase[index_seq_cs1[pos]];
-		has_one_index = false;
-	}
-
-	// Insert into the hashmap
-	if (has_one_index)
-		insert_index_chem_map(index_chem_map, index_seq, chem_name);
-	else {
-		insert_index_chem_map(index_chem_map, index_seq, chem_name + ":Poly-A");
-		insert_index_chem_map(index_chem_map, index_seq_cs1, chem_name + ":CS1");
-	}
-}
-
-
-void shallow_parse_sample_sheet(const std::string& sample_sheet_file, int& n_barcodes, int& barcode_len, const std::string& chem_name, std::unordered_map<uint64_t, std::string>& index_chem_map) {
-	// Check if file exists
-	std::ifstream file_test(sample_sheet_file);
-	if (!file_test.good()) {
-		printf("File %s does not exist. Ignore!\n", sample_sheet_file.c_str());
-		return;
-	}
-
-	std::string line;
-
-	n_barcodes = 0;
-	barcode_len = 0;
-
-	if (sample_sheet_file.length() > 3 && sample_sheet_file.substr(sample_sheet_file.length() - 3, 3) == ".gz") {
-		iGZipFile gin(sample_sheet_file);
-		while (gin.next(line))
-			shallow_parse_one_line(line, n_barcodes, barcode_len, chem_name, index_chem_map);
-	} else {
-		std::ifstream fin(sample_sheet_file);
-		while (std::getline(fin, line))
-			shallow_parse_one_line(line, n_barcodes, barcode_len, chem_name, index_chem_map);
-		fin.close();
-	}
 }
 
 #endif
