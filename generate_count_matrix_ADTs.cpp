@@ -252,7 +252,6 @@ void detect_chemistry() {
 		// A compound chemistry is given. Auto-detect
 		const int nskim = 10000; // Look at first 10,000 reads
 		int n_cb, len_cb;
-		bool convert_cell_barcode;
 		unordered_map<uint64_t, string>::iterator chem_iter;
 		uint64_t binary_cb;
 		size_t pos;
@@ -265,13 +264,13 @@ void detect_chemistry() {
 		for (string& chem : it->second) {
 			chem_cnt_map.insert(make_pair(chem, 0));
 			convert_cell_barcode = feature_type == "antibody" ? false : true;
-			shallow_parse_sample_sheet(cb_inclusion_file_dict[chem], n_cb, len_cb, chem, cb_index_chem_map, convert_cell_barcode);
+			shallow_parse_sample_sheet(cb_inclusion_file_dict[chem], n_cb, len_cb, chem, cb_index_chem_map);
 		}
 		if (cb_index_chem_map.size() == 0) {
 			printf("[Chemistry detection] No 10x barcode inclusion list file is provided! Cannot detect chemistry!\n");
 			exit(-1);
 		}
-		printf("[Chemistry detection] 10x barcode map is built.\n");
+		printf("[Chemistry detection] 10x barcode map of %ld indexes is built.\n", cb_index_chem_map.size());
 
 		// Count cell barcode matches
 		for (auto&& input_pair : inputs) {
@@ -301,6 +300,7 @@ void detect_chemistry() {
 		int snd_max_cnt = -1;
 		string chem_max;
 		string chem_snd_max;
+		string capture_method = "";
 
 		for (const auto& p : chem_cnt_map)
 			if (p.second > max_cnt) {
@@ -320,8 +320,29 @@ void detect_chemistry() {
 			} else
 				printf("[Chemistry detection] Only 1 chemistry has matches in first 10,000 reads: %s (%d matches).\n", chem_max.c_str(), max_cnt);
 
-			chemistry_detected = chem_max;
-			printf("[Chemistry detection] Detect %s chemistry.\n", chemistry_detected.c_str());
+			pos = chem_max.find_first_of(':');
+			if (pos != string::npos) {
+				// Decide totalseq_type and barcode_pos
+				chemistry_detected = chem_max.substr(0, pos);
+				capture_method = chem_max.substr(pos + 1);
+				if (feature_type == "antibody") {
+					totalseq_type = capture_method == "Poly-A" ? "TotalSeq-A" : "TotalSeq-B";
+					barcode_pos = (totalseq_type == "TotalSeq-A" ? totalseq_A_pos : totalseq_BC_pos);
+				}
+			} else {
+				chemistry_detected = chem_max;
+				if (chemistry_detected == "SC5Pv3" && feature_type == "antibody") {
+					totalseq_type = "TotalSeq-C";
+					barcode_pos = totalseq_BC_pos;
+				}
+			}
+
+			printf("[Chemistry detection] Detect %s chemistry", chemistry_detected.c_str());
+			if (capture_method != "")
+				printf(" with %s capture.\n", capture_method.c_str());
+			if (totalseq_type != "")
+				printf("[Chemistry detection] Detect %s type, barcodes start from 0-based position %d.\n", totalseq_type.c_str(), barcode_pos);
+
 		} else {
 			printf("Failed at chemistry detection: No cell barcode match! Please check if it is a 10x assay!");
 			exit(-1);
@@ -559,24 +580,17 @@ int main(int argc, char* argv[]) {
 		max_mismatch_cell = (chemistry_detected == "10x_v2" || chemistry_detected == "SC3Pv2" || chemistry_detected == "SC5Pv2" || chemistry_detected == "multiome") ? 1 : 0;
 
 	// Determine totalseq_type, as well as barcode_pos if crispr
-	if (chemistry_detected == "SC3Pv3" || chemistry_detected == "SC3Pv4") {
-		if (feature_type == "antibody")
-			totalseq_type = barcode_pos < 0 ? "TotalSeq-A" : "";  // if specify --barcode-pos, must be a customized assay
-		else {
-			if (feature_type != "crispr") {
-				printf("Do not support unknown feature type %s!\n", feature_type.c_str());
-				exit(-1);
-			}
-			totalseq_type = "TotalSeq-B";
-			if (barcode_pos < 0) barcode_pos = 0; // default is 0
+	if (feature_type == "antibody") {
+		if (totalseq_type == "" && barcode_pos < 0)
+			detect_totalseq_type();  // if specify --barcode-pos, must be a customized assay
+	} else {
+		if (feature_type != "crispr") {
+			printf("Do not support unknown feature type %s!\n", feature_type.c_str());
+			exit(-1);
 		}
-	} else if (chemistry_detected == "SC5Pv2" || chemistry_detected == "SC5Pv3")
-		totalseq_type = "TotalSeq-C";
-	else {
-		if (feature_type == "antibody" && barcode_pos < 0)
-			detect_totalseq_type();
+		if (barcode_pos < 0) barcode_pos = 0;    // default is 0
 	}
-	printf("TotalSeq type: %s\n", totalseq_type.c_str());
+
 
 	interim_ = time(NULL);
 	printf("Load cell barcodes.\n");
