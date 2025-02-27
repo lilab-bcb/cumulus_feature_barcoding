@@ -506,7 +506,7 @@ int main(int argc, char* argv[]) {
 
 	n_threads = 2;
 	chemistry = "auto";
-	max_mismatch_cell = 0;
+	max_mismatch_cell = -1;
 	feature_type = "antibody";
 	max_mismatch_feature = 2;
 	umi_len = 12;
