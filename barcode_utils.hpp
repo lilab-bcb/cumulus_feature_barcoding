@@ -191,7 +191,6 @@ inline void parse_one_line(const std::string& line, int& n_barcodes, int& barcod
 	std::string index_name, index_seq;
 	std::size_t pos;
 	bool is_two_col_format = false;
-	std::string seq1, seq2;
 
 	if (line.empty()) return;
 
@@ -207,13 +206,12 @@ inline void parse_one_line(const std::string& line, int& n_barcodes, int& barcod
 		// Cell barcode file
 		pos = line.find_first_of('\t');
 		if (pos != std::string::npos) {
-			// SC3Pv4: Column 0 for CS1, 1 for Poly-A
+			// Two-column case: Column 0 for CS1, 1 for Poly-A
 			is_two_col_format = true;
-			seq1 = line.substr(0, pos);
-			seq2 = line.substr(pos + 1);
-			trim(seq1);
-			trim(seq2);
-			index_seq = seq2;
+			index_name = line.substr(pos + 1);
+			index_seq = convert_cell_barcode ? line.substr(0, pos) : index_name;
+			trim(index_seq);
+			trim(index_name);
 		} else {
 			// Otherwise
 			index_seq = line;
@@ -227,17 +225,12 @@ inline void parse_one_line(const std::string& line, int& n_barcodes, int& barcod
 	if (barcode_len == 0) barcode_len = index_seq.length();
 	else assert(barcode_len == index_seq.length());
 
-	if (convert_cell_barcode) {
-		if (is_two_col_format) {
-			// Two column case
-			index_name = convert_cell_barcode ? seq1 : seq2;
-		} else {
-			// One column case
-			pos = barcode_len / 2 - 1;
-			index_seq[pos] = base2rcbase[index_seq[pos]];
-			++pos;
-			index_seq[pos] = base2rcbase[index_seq[pos]];
-		}
+	if (convert_cell_barcode && !is_two_col_format) {
+		// One column case
+		pos = barcode_len / 2 - 1;
+		index_seq[pos] = base2rcbase[index_seq[pos]];
+		++pos;
+		index_seq[pos] = base2rcbase[index_seq[pos]];
 	}
 
 	if (max_mismatch == 1) mutate_index_one_mismatch(index_dict, index_seq, n_barcodes);

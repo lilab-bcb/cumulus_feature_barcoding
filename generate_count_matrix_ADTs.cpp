@@ -340,6 +340,9 @@ void detect_chemistry() {
 			printf("[Chemistry detection] Detect %s chemistry", chemistry_detected.c_str());
 			if (capture_method != "")
 				printf(" with %s capture.\n", capture_method.c_str());
+			else
+				printf(".\n");
+
 			if (totalseq_type != "")
 				printf("[Chemistry detection] Detect %s type, barcodes start from 0-based position %d.\n", totalseq_type.c_str(), barcode_pos);
 
