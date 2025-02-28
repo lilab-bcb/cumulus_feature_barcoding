@@ -265,7 +265,7 @@ void detect_chemistry() {
 		for (int i = 0; i < n_chems; ++i) {
 			cur_chem = it->second[i];
 			chem_names[i] = cur_chem;
-			parse_sample_sheet(cb_inclusion_file_dict[cur_chem], n_cb, len_cb, chem_cb_indexes[i], dummy, 0, false, false);
+			parse_sample_sheet(cb_inclusion_file_dict[cur_chem], n_cb, len_cb, chem_cb_indexes[i], dummy, 0, false);
 		}
 
 		// Count cell barcode matches

@@ -224,7 +224,7 @@ inline void skip_bom(std::string& line) {
 	line = line.substr(start);
 }
 
-void parse_sample_sheet(const std::string& sample_sheet_file, int& n_barcodes, int& barcode_len, HashType& index_dict, std::vector<std::string>& index_names, int max_mismatch = 1, bool verbose = true, bool is_process = true) {
+void parse_sample_sheet(const std::string& sample_sheet_file, int& n_barcodes, int& barcode_len, HashType& index_dict, std::vector<std::string>& index_names, int max_mismatch = 1, bool verbose = true) {
 	std::string line;
 
 	n_barcodes = 0;
@@ -241,7 +241,7 @@ void parse_sample_sheet(const std::string& sample_sheet_file, int& n_barcodes, i
 				skip_bom(line);
 				is_first_line = false;
 			}
-			parse_one_line(line, n_barcodes, barcode_len, index_dict, index_names, max_mismatch, is_process);
+			parse_one_line(line, n_barcodes, barcode_len, index_dict, index_names, max_mismatch);
 		}
 	}
 	else {
@@ -251,7 +251,7 @@ void parse_sample_sheet(const std::string& sample_sheet_file, int& n_barcodes, i
 				skip_bom(line);
 				is_first_line = false;
 			}
-			parse_one_line(line, n_barcodes, barcode_len, index_dict, index_names, max_mismatch, is_process);
+			parse_one_line(line, n_barcodes, barcode_len, index_dict, index_names, max_mismatch);
 		}
 		fin.close();
 	}
