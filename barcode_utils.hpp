@@ -187,7 +187,7 @@ inline void group_by_modality(HashType& index_dict, std::vector<std::string>& in
 	}
 }
 
-inline void parse_one_line(const std::string& line, int& n_barcodes, int& barcode_len, HashType& index_dict, std::vector<std::string>& index_names, int max_mismatch, bool is_process) {
+inline void parse_one_line(const std::string& line, int& n_barcodes, int& barcode_len, HashType& index_dict, std::vector<std::string>& index_names, int max_mismatch) {
 	std::string index_name, index_seq;
 	std::size_t pos;
 
@@ -207,7 +207,7 @@ inline void parse_one_line(const std::string& line, int& n_barcodes, int& barcod
 	if (max_mismatch == 1) mutate_index_one_mismatch(index_dict, index_seq, n_barcodes);
 	else mutate_index(index_dict, barcode_to_binary(index_seq), index_seq.length(), n_barcodes, max_mismatch, 0, 0);
 
-	if (is_process) index_names.push_back(index_name);    // Only use index_names when processing cell barcodes for feature barcoding; ignore if auto-detecting chemistry
+	index_names.push_back(index_name);
 	++n_barcodes;
 }
 

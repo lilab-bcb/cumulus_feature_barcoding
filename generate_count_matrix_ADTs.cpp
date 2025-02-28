@@ -265,7 +265,6 @@ void detect_chemistry() {
 		for (int i = 0; i < n_chems; ++i) {
 			cur_chem = it->second[i];
 			chem_names[i] = cur_chem;
-			// YIMING: Should I consider the case when len_cb varies in chemistries?
 			parse_sample_sheet(cb_inclusion_file_dict[cur_chem], n_cb, len_cb, chem_cb_indexes[i], dummy, 0, false, false);
 		}
 
@@ -301,7 +300,10 @@ void detect_chemistry() {
 		if (max_cnt > 0) {
 			if (snd_max_cnt > 0) {
 				printf("[Chemistry detection] Top 2 chemistries in first %d reads: %s (%d matches), %s (%d matches).\n", nskim, chem_max.c_str(), max_cnt, chem_snd_max.c_str(), snd_max_cnt);
-				if (static_cast<float>(max_cnt - snd_max_cnt) / nskim < 0.1) {
+				if (static_cast<float>(max_cnt) / nskim < 0.05) {
+					printf("No chemistry has matched reads exceeding 5%% of first %d reads! Please check if you specify the correct chemistry type, or if it is a 10x assay!\n", nskim);
+					exit(-1);
+				} else if (static_cast<float>(max_cnt - snd_max_cnt) / nskim < 0.1) {
 					printf("Top 2 chemistries have matched reads < 10%% of first %d reads! Cannot decide assay type! Please check if it is a 10x assay!\n", nskim);
 					exit(-1);
 				}
