@@ -271,7 +271,7 @@ void auto_detection() {
 			cur_chem = it->second[i];
 			printf("Loading %s cb file.\n", cur_chem.c_str());
 			chem_names[i] = cur_chem;
-			parse_sample_sheet(cb_inclusion_file_dict[cur_chem], n_cb, len_cb, chem_cb_indexes[i], dummy, 1, true);  // For debug
+			parse_sample_sheet(cb_inclusion_file_dict[cur_chem], n_cb, len_cb, chem_cb_indexes[i], dummy, 0, false);
 		}
 
 		// Count cell barcode matches
