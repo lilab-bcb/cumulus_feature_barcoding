@@ -37,8 +37,8 @@ unordered_map<string, vector<string>> compound_chemistry_dict = {
 
 unordered_map<string, string> cb_inclusion_file_dict = {
 	{"10x_v2", "737K-august-2016.txt"},
-	{"SC3Pv2", "737K-august-2016.txt.gz"},
-	{"SC5Pv2", "737K-august-2016.txt.gz"},
+	{"SC3Pv2", "737K-august-2016.txt"},
+	{"SC5Pv2", "737K-august-2016.txt"},
 	{"SC3Pv3:Poly-A", "3M-february-2018_TRU.txt.gz"},
 	{"SC3Pv3:CS1", "3M-february-2018_NXT.txt.gz"},
 	{"SC3Pv4:Poly-A", "3M-3pgex-may-2023_TRU.txt.gz"},
@@ -235,28 +235,33 @@ inline bool extract_feature_barcode(const string& sequence, int feature_length, 
 }
 
 
-void detect_chemistry() {
+void auto_detection() {
 	// Redirect 10x barcode inclusion list files
 	for (auto& p : cb_inclusion_file_dict) {
 		p.second = cb_dir + p.second;
 	}
+
+	const int nskim = 10000;  // Look at first 10,000 reads if auto-detection is needed.
+	int cnt;  // Hide the global "cnt" which is for total numbers of reads.
+	size_t pos;
 
 	auto it = compound_chemistry_dict.find(chemistry);
 	if (it == compound_chemistry_dict.end()) {    // The given chemistry name is not a compound chemistry type
 		if (cb_inclusion_file_dict.find(chemistry) == cb_inclusion_file_dict.end()) {
 			printf("Unknown chemistry type: %s!\n", chemistry.c_str());
 			exit(-1);
+		} else if (chemistry == "10x_v2") {
+			printf("%s chemistry type is for internal use only!\n", chemistry.c_str());
+			exit(-1);
 		}
 	} else {
 		// A compound chemistry is given. Auto-detect
-		const int nskim = 10000; // Look at first 10,000 reads
 		int n_chems = it->second.size();
 		string cur_chem;
 		int n_cb, len_cb;
 		vector<string> dummy;  // Placeholder. Not used.
 		uint64_t binary_cb;
 		Read read1;
-		size_t pos;
 
 		//Build count map
 		chem_names = vector<string>(n_chems, "");
@@ -264,11 +269,13 @@ void detect_chemistry() {
 		chem_cb_indexes = vector<HashType>(n_chems, HashType());
 		for (int i = 0; i < n_chems; ++i) {
 			cur_chem = it->second[i];
+			printf("Loading %s cb file.\n", cur_chem.c_str());
 			chem_names[i] = cur_chem;
-			parse_sample_sheet(cb_inclusion_file_dict[cur_chem], n_cb, len_cb, chem_cb_indexes[i], dummy, 0, false);
+			parse_sample_sheet(cb_inclusion_file_dict[cur_chem], n_cb, len_cb, chem_cb_indexes[i], dummy, 1, true);  // For debug
 		}
 
 		// Count cell barcode matches
+		cnt = 0;
 		for (auto&& input_pair : inputs) {
 			iGZipFile gzip_in_r1(input_pair[0]);
 			while (gzip_in_r1.next(read1) && cnt < nskim) {
@@ -287,7 +294,6 @@ void detect_chemistry() {
 		int snd_max_cnt = -1;
 		string chem_max;
 		string chem_snd_max;
-		string capture_method;
 
 		for (int i = 0; i < n_chems; ++i)
 			if (chem_cnts[i] > max_cnt) {
@@ -299,7 +305,7 @@ void detect_chemistry() {
 
 		if (max_cnt > 0) {
 			if (snd_max_cnt > 0) {
-				printf("[Chemistry detection] Top 2 chemistries in first %d reads: %s (%d matches), %s (%d matches).\n", nskim, chem_max.c_str(), max_cnt, chem_snd_max.c_str(), snd_max_cnt);
+				printf("[Auto-detection] Top 2 chemistries in first %d reads: %s (%d matches), %s (%d matches).\n", nskim, chem_max.c_str(), max_cnt, chem_snd_max.c_str(), snd_max_cnt);
 				if (static_cast<float>(max_cnt) / nskim < 0.05) {
 					printf("No chemistry has matched reads exceeding 5%% of first %d reads! Please check if you specify the correct chemistry type, or if it is a 10x assay!\n", nskim);
 					exit(-1);
@@ -308,70 +314,90 @@ void detect_chemistry() {
 					exit(-1);
 				}
 			} else
-				printf("[Chemistry detection] Only 1 chemistry has matches in the first %d reads: %s (%d matches).\n", nskim, chem_max.c_str(), max_cnt);
+				printf("[Auto-detection] Only 1 chemistry has matches in the first %d reads: %s (%d matches).\n", nskim, chem_max.c_str(), max_cnt);
 
 			chemistry = chem_max;
-			pos = chemistry.find_first_of(':');
-			if (pos != string::npos) {
-				// Decide totalseq_type and barcode_pos
-				capture_method = chemistry.substr(pos + 1);
-				if (feature_type == "antibody") {
-					totalseq_type = capture_method == "Poly-A" ? "TotalSeq-A" : "TotalSeq-B";
-					barcode_pos = totalseq_type == "TotalSeq-A" ? totalseq_A_pos : totalseq_BC_pos;
-				}
-			} else {
-				if (chemistry == "SC5Pv3" && feature_type == "antibody") {
-					totalseq_type = "TotalSeq-C";
-					barcode_pos = totalseq_BC_pos;
-				}
-			}
-
-			printf("[Chemistry detection] Detect %s chemistry.\n", chemistry.c_str());
-			if (totalseq_type != "")
-				printf("[Chemistry detection] Detect %s type, barcodes start from 0-based position %d.\n", totalseq_type.c_str(), barcode_pos);
-
 		} else {
 			printf("Failed at chemistry detection: No cell barcode match in the first %d reads! Please check if it is a 10x assay!", nskim);
 			exit(-1);
 		}
-	}
-}
+	} // End of chemistry detection
 
+	// Detect umi_len and max_mismatch_cell
+	if (umi_len == -1)
+		umi_len = (chemistry == "10x_v2" || chemistry == "SC3Pv2" || chemistry == "SC5Pv2") ? 10 : 12;
+	if (max_mismatch_cell == -1)
+		max_mismatch_cell = (chemistry == "10x_v2" || chemistry == "SC3Pv2" || chemistry == "SC5Pv2" || chemistry == "multiome") ? 1 : 0;
+	printf("[Auto-detection] Set UMI length to %d, and set maximum cell barcode mismatch to %d.\n", umi_len, max_mismatch_cell);
 
-void detect_totalseq_type() {
-	const int nskim = 10000; // Look at first 10000 reads.
-	int ntotA, ntotBC, cnt;
-	uint64_t binary_feature;
-	Read read2;
-	HashIterType feature_iter;
+	// Detect totalseq_type (for antibody assays) and barcode_pos
+	if (feature_type == "antibody") {
+		// Detect totalseq_type
+		pos = chemistry.find_first_of(':');
+		if (pos != string::npos) {
+			string capture_method = chemistry.substr(pos + 1);
+			totalseq_type = capture_method == "Poly-A" ? "TotalSeq-A" : "TotalSeq-B";
+		} else if (chemistry == "SC5Pv3")
+			totalseq_type = "TotalSeq-C";
+		else {
+			// 10x_v2 or multiome
+			// if specify --barcode-pos, must be a customized assay
+			if (barcode_pos < 0) {
+				int ntotA, ntotC;
+				uint64_t binary_feature;
+				Read read2;
+				HashIterType feature_iter;
 
-	cnt = ntotA = ntotBC = 0;
-	for (auto&& input_pair : inputs) {
-		iGZipFile gzip_in_r2(input_pair[1]);
-		while (gzip_in_r2.next(read2) && cnt < nskim) {
-			binary_feature = barcode_to_binary(safe_substr(read2.seq, totalseq_A_pos, feature_blen));
-			feature_iter = feature_index.find(binary_feature);
-			ntotA += (feature_iter != feature_index.end() && feature_iter->second.item_id >= 0);
+				cnt = ntotA = ntotC = 0;
+				for (auto&& input_pair : inputs) {
+					iGZipFile gzip_in_r2(input_pair[1]);
+					while (gzip_in_r2.next(read2) && cnt < nskim) {
+						binary_feature = barcode_to_binary(safe_substr(read2.seq, totalseq_A_pos, feature_blen));
+						feature_iter = feature_index.find(binary_feature);
+						ntotA += (feature_iter != feature_index.end() && feature_iter->second.item_id >= 0);
 
-			if (read2.seq.length() >= totalseq_BC_pos + feature_blen) {
-				binary_feature = barcode_to_binary(safe_substr(read2.seq, totalseq_BC_pos, feature_blen));
-				feature_iter = feature_index.find(binary_feature);
-				ntotBC += (feature_iter != feature_index.end() && feature_iter->second.item_id >= 0);
+						if (read2.seq.length() >= totalseq_BC_pos + feature_blen) {
+							binary_feature = barcode_to_binary(safe_substr(read2.seq, totalseq_BC_pos, feature_blen));
+							feature_iter = feature_index.find(binary_feature);
+							ntotC += (feature_iter != feature_index.end() && feature_iter->second.item_id >= 0);
+						}
+						++cnt;
+					}
+					if (cnt == nskim) break;
+				}
+
+				printf("ntotA = %d, ntotC = %d.\n", ntotA, ntotC);
+				if (ntotA < 10 && ntotC < 10) {
+					printf("Error: Detected less than 10 feature barcodes in the first %d reads! Maybe you should consider to reverse complement your barcodes?\n", nskim);
+					exit(-1);
+				}
+				totalseq_type = (ntotA > ntotC ? "TotalSeq-A" : "TotalSeq-C");
+				if (chemistry == "10x_v2")
+					chemistry = totalseq_type == "TotalSeq-A" ? "SC3Pv2" : "SC5Pv2";
 			}
-			++cnt;
 		}
-		if (cnt == nskim) break;
+
+		// Detect barcode_pos if not specified
+		if (barcode_pos < 0)
+			barcode_pos = totalseq_type == "TotalSeq-A" ? totalseq_A_pos : totalseq_BC_pos;
+
+		if (totalseq_type != "")
+			printf("TotalSeq type is automatically detected as %s. Barcodes starts from 0-based position %d.\n", totalseq_type.c_str(), barcode_pos);
+		else
+			printf("Customized assay. Barcodes start from 0-based position %d, which is specified by the user.\n", barcode_pos);
+
+	} else {
+		if (feature_type != "crispr") {
+			printf("Do not support unknown feature type %s!\n", feature_type.c_str());
+			exit(-1);
+		}
+		if (barcode_pos < 0 && scaffold_sequence == "") {
+			barcode_pos = 0;  // default is 0
+			printf("Warning: Automatically set barcode start position to %d, as neither --barcode-pos nor --scaffold-sequence is specified.\n", barcode_pos);
+		}
 	}
 
-	printf("ntotA = %d, ntotBC = %d.\n", ntotA, ntotBC);
-	if (ntotA < 10 && ntotBC < 10) {
-		printf("Error: Detected less than 10 feature barcodes in the first %d reads! Maybe you should consider to reverse complement your barcodes?\n", nskim);
-		exit(-1);
-	}
-
-	totalseq_type = (ntotA > ntotBC ? "TotalSeq-A" : (umi_len == 12 ? "TotalSeq-B" : "TotalSeq-C"));
-	barcode_pos = (totalseq_type == "TotalSeq-A" ? totalseq_A_pos : totalseq_BC_pos);
-	printf("TotalSeq type is automatically detected as %s, barcode starts from 0-based position %d.\n", totalseq_type.c_str(), barcode_pos);
+	printf("Detect %s chemistry type.\n", chemistry.c_str());
 }
 
 
@@ -493,7 +519,7 @@ int main(int argc, char* argv[]) {
 		printf("\t--max-mismatch-cell #\tmaximum number of mismatches allowed for cell barcodes. [default: auto-decided by chemistry]\n");
 		printf("\t--feature feature_type\tfeature type can be either antibody or crispr. [default: antibody]\n");
 		printf("\t--max-mismatch-feature #\tmaximum number of mismatches allowed for feature barcodes. [default: 2]\n");
-		printf("\t--umi-length len\tlength of the UMI sequence. [default: 12]\n");
+		printf("\t--umi-length len\tlength of the UMI sequence. [default: auto-decided by chemistry]\n");
 		printf("\t--barcode-pos #\tstart position of barcode in read 2, 0-based coordinate. [default: automatically determined for antibody; 0 for crispr]\n");
 		printf("\t--convert-cell-barcode\tconvert cell barcode to match RNA cell barcodes for 10x Genomics' data. Note that both cmo and 10x crispr need to set this option to convert feature barcoding barcodes to RNA barcodes. When data is hashing/CITE-Seq, this option will be automatically turned on for TotalSeq-B antibodies.\n");
 		printf("\t--scaffold-sequence sequence\tscaffold sequence used to locate the protospacer for sgRNA. This option is only used for crispr data. If --barcode-pos is not set and this option is set, try to locate barcode in front of the specified scaffold sequence.\n");
@@ -511,7 +537,7 @@ int main(int argc, char* argv[]) {
 	max_mismatch_cell = -1;
 	feature_type = "antibody";
 	max_mismatch_feature = 2;
-	umi_len = 12;
+	umi_len = -1;
 	barcode_pos = -1;
 	totalseq_type = "";
 	scaffold_sequence = "";
@@ -560,23 +586,8 @@ int main(int argc, char* argv[]) {
 	if (cb_dir.length() > 0 && cb_dir[cb_dir.length()-1] != '/')
 		cb_dir += "/";
 
-	detect_chemistry();
-
-	// Determine UMI length, as well as max_mismatch_cell if not specified
-	umi_len = (chemistry == "10x_v2" || chemistry == "SC3Pv2" || chemistry == "SC5Pv2") ? 10 : 12;
-	if (max_mismatch_cell == -1)
-		max_mismatch_cell = (chemistry == "10x_v2" || chemistry == "SC3Pv2" || chemistry == "SC5Pv2" || chemistry == "multiome") ? 1 : 0;
-
-	if (feature_type == "antibody") {
-		if (totalseq_type == "" && barcode_pos < 0) detect_totalseq_type(); // if specify --barcode-pos, must be a customized assay
-	}
-    else {
-		if (feature_type != "crispr") {
-			printf("Do not support unknown feature type %s!\n", feature_type.c_str());
-			exit(-1);
-		}
-		if (barcode_pos < 0) barcode_pos = 0; // default is 0
-	}
+	// Determine chemistry, totalseq_type (for antibody assays), barcode_pos, umi_len, max_mismatch_cells
+	auto_detection();
 
 	interim_ = time(NULL);
 	printf("Load cell barcodes.\n");
