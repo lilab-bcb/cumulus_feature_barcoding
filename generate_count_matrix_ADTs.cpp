@@ -31,7 +31,7 @@ unordered_map<string, vector<string>> compound_chemistry_dict = {
 	{"auto", {"10x_v2", "SC3Pv3:Poly-A", "SC3Pv3:CS1", "SC3Pv4:Poly-A", "SC3Pv4:CS1", "SC5Pv3", "multiome"}},
 	{"threeprime", {"10x_v2", "SC3Pv3:Poly-A", "SC3Pv3:CS1", "SC3Pv4:Poly-A", "SC3Pv4:CS1"}},
 	{"fiveprime", {"10x_v2", "SC5Pv3"}},
-	{"SC3Pv3", {"SCP3v3:Poly-A", "SCP3v3:CS1"}},
+	{"SC3Pv3", {"SC3Pv3:Poly-A", "SC3Pv3:CS1"}},
 	{"SC3Pv4", {"SC3Pv4:Poly-A", "SC3Pv4:CS1"}},
 };
 
@@ -269,8 +269,7 @@ void auto_detection() {
 		chem_cb_indexes = vector<HashType>(n_chems, HashType());
 		for (int i = 0; i < n_chems; ++i) {
 			cur_chem = it->second[i];
-			printf("Loading %s cb file.\n", cur_chem.c_str());
-			chem_names[i] = cur_chem;
+			printf("Loading %s cell barcode file...\n", cur_chem.c_str());
 			parse_sample_sheet(cb_inclusion_file_dict[cur_chem], n_cb, len_cb, chem_cb_indexes[i], dummy, 0, false);
 		}
 
