@@ -269,6 +269,7 @@ void auto_detection() {
 		chem_cb_indexes = vector<HashType>(n_chems, HashType());
 		for (int i = 0; i < n_chems; ++i) {
 			cur_chem = it->second[i];
+			chem_names[i] = cur_chem;
 			printf("Loading %s cell barcode file...\n", cur_chem.c_str());
 			parse_sample_sheet(cb_inclusion_file_dict[cur_chem], n_cb, len_cb, chem_cb_indexes[i], dummy, 0, false);
 		}
