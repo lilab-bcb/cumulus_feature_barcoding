@@ -59,7 +59,6 @@ atomic<int> cnt, n_valid, n_valid_cell, n_valid_feature, prev_cnt; // cnt: total
 int n_threads, max_mismatch_cell, max_mismatch_feature, umi_len;
 string feature_type, totalseq_type, scaffold_sequence;
 int barcode_pos; // Antibody: Total-Seq A 0; Total-Seq B or C 10. Crispr: default 0, can be set by option
-bool convert_cell_barcode;
 
 time_t start_, interim_, end_;
 
@@ -521,7 +520,6 @@ int main(int argc, char* argv[]) {
 		printf("\t--max-mismatch-feature #\tmaximum number of mismatches allowed for feature barcodes. [default: 2]\n");
 		printf("\t--umi-length len\tlength of the UMI sequence. [default: auto-decided by chemistry]\n");
 		printf("\t--barcode-pos #\tstart position of barcode in read 2, 0-based coordinate. [default: automatically determined for antibody; 0 for crispr]\n");
-		printf("\t--convert-cell-barcode\tconvert cell barcode to match RNA cell barcodes for 10x Genomics' data. Note that both cmo and 10x crispr need to set this option to convert feature barcoding barcodes to RNA barcodes. When data is hashing/CITE-Seq, this option will be automatically turned on for TotalSeq-B antibodies.\n");
 		printf("\t--scaffold-sequence sequence\tscaffold sequence used to locate the protospacer for sgRNA. This option is only used for crispr data. If --barcode-pos is not set and this option is set, try to locate barcode in front of the specified scaffold sequence.\n");
 		printf("Outputs:\n\toutput_name.csv\tfeature-cell count matrix. First row: [Antibody/CRISPR],barcode_1,...,barcode_n;Other rows: feature_name,feature_count_1,...,feature_count_n.\n");
 		printf("\toutput_name.stat.csv.gz\tSufficient statistics file. First row: Barcode,UMI,Feature,Count; Other rows: each row describe the read count for one barcode-umi-feature combination.\n\n");
@@ -541,7 +539,6 @@ int main(int argc, char* argv[]) {
 	barcode_pos = -1;
 	totalseq_type = "";
 	scaffold_sequence = "";
-	convert_cell_barcode = false;
 
 	for (int i = 5; i < argc; ++i) {
 		if (!strcmp(argv[i], "-p")) {
@@ -564,9 +561,6 @@ int main(int argc, char* argv[]) {
 		}
 		if (!strcmp(argv[i], "--barcode-pos")) {
 			barcode_pos = atoi(argv[i + 1]);
-		}
-		if (!strcmp(argv[i], "--convert-cell-barcode")) {
-			convert_cell_barcode = true;
 		}
 		if (!strcmp(argv[i], "--scaffold-sequence")) {
 			scaffold_sequence = argv[i + 1];
