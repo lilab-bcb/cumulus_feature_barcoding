@@ -379,6 +379,8 @@ void auto_detection() {
 		// Detect barcode_pos if not specified
 		if (barcode_pos < 0)
 			barcode_pos = totalseq_type == "TotalSeq-A" ? totalseq_A_pos : totalseq_BC_pos;
+		else
+			totalseq_type = "";    // Customized assay, e.g. CellPlex using CMO
 
 		if (totalseq_type != "")
 			printf("TotalSeq type is automatically detected as %s. Barcodes starts from 0-based position %d.\n", totalseq_type.c_str(), barcode_pos);
