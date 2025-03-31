@@ -56,7 +56,7 @@ string chemistry;
 
 atomic<int> cnt, n_valid, n_valid_cell, n_valid_feature, prev_cnt; // cnt: total number of reads; n_valid, reads with valid cell barcode and feature barcode; n_valid_cell, reads with valid cell barcode; n_valid_feature, reads with valid feature barcode; prev_cnt: for printing # of reads processed purpose
 
-int n_threads, max_mismatch_cell, max_mismatch_feature, umi_len;
+int n_threads, max_mismatch_cell, max_mismatch_feature, umi_len, umi_mismatch;
 string feature_type, totalseq_type, scaffold_sequence;
 int barcode_pos; // Antibody: Total-Seq A 0; Total-Seq B or C 10. Crispr: default 0, can be set by option
 
@@ -259,7 +259,7 @@ void auto_detection() {
 		string cur_chem;
 		int n_cb, len_cb;
 		vector<string> dummy;  // Placeholder. Not used.
-		uint64_t binary_cb;
+		BinaryCodeType binary_cb;
 		Read read1;
 
 		//Build count map
@@ -280,7 +280,7 @@ void auto_detection() {
 			while (gzip_in_r1.next(read1) && cnt < nskim) {
 				binary_cb = barcode_to_binary(safe_substr(read1.seq, 0, len_cb));
 				for (int i = 0; i < n_chems; ++i) {
-					if (chem_cb_indexes[i].find(binary_cb) != chem_cb_indexes[i].end())
+					if (chem_cb_indexes[i].find(binary_cb.bid) != chem_cb_indexes[i].end())
 						++chem_cnts[i];
 				}
 				++cnt;
@@ -343,7 +343,7 @@ void auto_detection() {
 			// if specify --barcode-pos, must be a customized assay
 			if (barcode_pos < 0) {
 				int ntotA, ntotC;
-				uint64_t binary_feature;
+				BinaryCodeType binary_feature;
 				Read read2;
 				HashIterType feature_iter;
 
@@ -352,13 +352,13 @@ void auto_detection() {
 					iGZipFile gzip_in_r2(input_pair[1]);
 					while (gzip_in_r2.next(read2) && cnt < nskim) {
 						binary_feature = barcode_to_binary(safe_substr(read2.seq, totalseq_A_pos, feature_blen));
-						feature_iter = feature_index.find(binary_feature);
-						ntotA += (feature_iter != feature_index.end() && feature_iter->second.item_id >= 0);
+						feature_iter = feature_index.find(binary_feature.bid);
+						ntotA += (feature_iter != feature_index.end() && feature_iter->second.vid >= 0);
 
 						if (read2.seq.length() >= totalseq_BC_pos + feature_blen) {
 							binary_feature = barcode_to_binary(safe_substr(read2.seq, totalseq_BC_pos, feature_blen));
-							feature_iter = feature_index.find(binary_feature);
-							ntotC += (feature_iter != feature_index.end() && feature_iter->second.item_id >= 0);
+							feature_iter = feature_index.find(binary_feature.bid);
+							ntotC += (feature_iter != feature_index.end() && feature_iter->second.vid >= 0);
 						}
 						++cnt;
 					}
@@ -435,7 +435,7 @@ bool parse_feature_names(int n_feature, vector<string>& feature_names, int& n_ca
 
 void process_reads(ReadParser *parser, int thread_id) {
 	string cell_barcode, umi, feature_barcode;
-	uint64_t binary_cell, binary_umi, binary_feature;
+	BinaryCodeType binary_cell, binary_umi, binary_feature;
 	int read1_len;
 	int cell_id, feature_id, collector_pos;
 	bool valid_cell, valid_feature;
@@ -457,14 +457,14 @@ void process_reads(ReadParser *parser, int thread_id) {
 			++cnt_;
 			cell_barcode = safe_substr(read1.seq, 0, cell_blen);
 			binary_cell = barcode_to_binary(cell_barcode);
-			cell_iter = cell_index.find(binary_cell);
-			valid_cell = cell_iter != cell_index.end() && cell_iter->second.item_id >= 0;
+			cell_iter = cell_index.find(binary_cell.bid);
+			valid_cell = cell_iter != cell_index.end() && cell_iter->second.vid >= 0 && (binary_cell.mask & cell_iter->second.mask) == binary_cell.mask;
 
 			valid_feature = extract_feature_barcode(read2.seq, feature_blen, feature_type, feature_barcode);
 			if (valid_feature) {
 				binary_feature = barcode_to_binary(feature_barcode);
-				feature_iter = feature_index.find(binary_feature);
-				valid_feature = feature_iter != feature_index.end() && feature_iter->second.item_id >= 0;
+				feature_iter = feature_index.find(binary_feature.bid);
+				valid_feature = feature_iter != feature_index.end() && feature_iter->second.vid >= 0 && (binary_feature.mask & feature_iter->second.mask) == binary_feature.mask;
 			}
 
 			n_valid_cell_ += valid_cell;
@@ -480,10 +480,10 @@ void process_reads(ReadParser *parser, int thread_id) {
 				umi = safe_substr(read1.seq, cell_blen, umi_len);
 				binary_umi = barcode_to_binary(umi);
 
-				cell_id = cell_iter->second.item_id;
-				feature_id = feature_iter->second.item_id;
+				cell_id = cell_iter->second.vid;
+				feature_id = feature_iter->second.vid;
 				collector_pos = detected_ftype ? feature_categories[feature_id] : 0;
-				buffer[collector_pos].emplace_back(cell_id, binary_umi, feature_id);
+				buffer[collector_pos].emplace_back(cell_id, binary_umi.bid, feature_id);
 			}
 		}
 
@@ -521,6 +521,7 @@ int main(int argc, char* argv[]) {
 		printf("\t--feature feature_type\tfeature type can be either antibody or crispr. [default: antibody]\n");
 		printf("\t--max-mismatch-feature #\tmaximum number of mismatches allowed for feature barcodes. [default: 2]\n");
 		printf("\t--umi-length len\tlength of the UMI sequence. [default: auto-decided by chemistry]\n");
+		printf("\t--umi-mismatch\tnumber of mismatches allowed for UMI sequences. [default: 0]\n");
 		printf("\t--barcode-pos #\tstart position of barcode in read 2, 0-based coordinate. [default: automatically determined for antibody; 0 for crispr]\n");
 		printf("\t--scaffold-sequence sequence\tscaffold sequence used to locate the protospacer for sgRNA. This option is only used for crispr data. If --barcode-pos is not set and this option is set, try to locate barcode in front of the specified scaffold sequence.\n");
 		printf("Outputs:\n\toutput_name.csv\tfeature-cell count matrix. First row: [Antibody/CRISPR],barcode_1,...,barcode_n;Other rows: feature_name,feature_count_1,...,feature_count_n.\n");
@@ -538,6 +539,7 @@ int main(int argc, char* argv[]) {
 	feature_type = "antibody";
 	max_mismatch_feature = 2;
 	umi_len = -1;
+	umi_mismatch = 0;
 	barcode_pos = -1;
 	totalseq_type = "";
 	scaffold_sequence = "";
@@ -560,6 +562,9 @@ int main(int argc, char* argv[]) {
 		}
 		if (!strcmp(argv[i], "--umi-length")) {
 			umi_len = atoi(argv[i + 1]);
+		}
+		if (!strcmp(argv[i], "--umi-mismatch")) {
+			umi_mismatch = atoi(argv[i + 1]);
 		}
 		if (!strcmp(argv[i], "--barcode-pos")) {
 			barcode_pos = atoi(argv[i + 1]);
@@ -618,6 +623,11 @@ int main(int argc, char* argv[]) {
 	end_ = time(NULL);
 	printf("Parsing input data is finished. %d reads are processed. Time spent = %.2fs.\n", cnt.load(), difftime(end_, interim_));
 	interim_ = end_;
+
+	/*if (umi_mismatch > 0) {
+		for (int i = 0; i < n_cat; ++i)
+			dataCollectors[i].correct_umi_counts(umi_len, umi_mismatch);
+	}*/
 
 	string output_name = argv[4];
 	ofstream fout;

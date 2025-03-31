@@ -17,6 +17,74 @@ typedef std::unordered_map<int, int> Feature2Count;
 typedef std::unordered_map<uint64_t, Feature2Count> UMI2Feature;
 typedef std::unordered_map<int, UMI2Feature> Cell2UMI;
 
+/*
+const int MAX_UMI_LEN = 12;
+
+class DisjointSet {
+	private:
+		std::unordered_map<uint64_t, uint64_t> parent;
+		std::unordered_map<uint64_t, int> count;
+		int mismatch_pos;
+
+	public:
+		// Constructor: Initializes each element as its own parent (a separate set).
+		DisjointSet(int pos) {
+			assert (pos >= 0 && pos < MAX_UMI_LEN);
+			parent.clear();
+			count.clear();
+			mismatch_pos = pos;
+		}
+
+		int find(int i) {
+			if (parent[i] != i) {
+				// Path compression: Make the parent of i the root of the set.
+				parent[i] = find(parent[i]);
+			}
+			return parent[i];
+		}
+
+		void unite(int x, int y) {
+			int rootX = find(x);
+			int rootY = find(y);
+
+			if (rootX != rootY) {
+				// Attach the shorter tree to the taller tree.
+				if (rank[rootX] <= rank[rootY]) {
+					parent[rootX] = rootY;
+				} else if (rank[rootX] > rank[rootY]) {
+					parent[rootY] = rootX;
+				}
+			}
+		}
+
+		bool connected(int x, int y){
+			return find(x) == find(y);
+		}
+
+		void build_set(std::vector<std::pair<uint64_t, int> > umi_counts) {
+			for (auto& p: umi_counts) {
+				parent[p.first] = p.first;
+				count[p.first] = p.second;
+			}
+
+			for (auto& kv: parent) {
+				uint64_t val = kv.first & aux_arr[mismatch_pos][NNUC];
+				for (int j = 0; j < NNUC; ++j)
+					if (val != aux_arr[mismatch_pos][j]) {
+						uint64_t bid_new = kv.first - val + aux_arr[mismatch_pos][j];
+						if (parent.find(bid_new) != parent.end())
+							unite(kv.first, bid_new);
+					}
+			}
+		}
+
+		std::vector<std::pair<uint64_t, int> > get_corrected_umi_counts() {
+
+		}
+};
+*/
+
+
 class DataCollector {
 public:
 	DataCollector() { clear(); }
@@ -49,7 +117,7 @@ public:
 			for (auto&& kv1 : one_cell) {
 				for (auto&& kv2 : kv1.second) {
 					gout.write(cell_names[cell_ids[i]]); gout.write(',');
-					gout.write(binary_to_barcode(kv1.first, umi_len)); gout.write(',');
+					gout.write(binary_to_barcode(BinaryCodeType(kv1.first, 0), umi_len)); gout.write(',');    // TODO: check if setting mask=0 is appropriate
 					gout.write(feature_names[kv2.first]); gout.write(',');
 					gout.write(std::to_string(kv2.second)); gout.write('\n');
 					total_reads += kv2.second;
@@ -84,7 +152,41 @@ public:
 		freport<< "Mean number of valid UMIs per cell barcode: "<< std::fixed<< std::setprecision(2)<< (total_cells > 0 ? total_umis * 1.0 / total_cells : 0.0)<< std::endl;
 		freport<< "Sequencing saturation: "<< std::fixed<< std::setprecision(2)<< (total_reads > 0 ? 100.0 - total_umis * 100.0 / total_reads : 0.0)<< "%"<< std::endl;
 	}
+/*
+	void correct_umi_counts(int umi_len, int umi_mismatch) {
+		std::vector<DisjointSet> ds (umi_len, DisjointSet(int(pow(2, umi_len - 1))));
+		std::unordered_map<int, std::vector<std::pair<uint64_t, int> > > feature2umi;
 
+		uint64_t umi_conv;
+		for (auto& p: data_container) {
+			uint64_t& cell_bid = p.first;
+			feature2umi.clear();
+			for (auto& p1: p.second) {
+				uint64_t& umi_bid = p1.first;
+				for (auto& p2: p1.second) {
+					int& feature_id = p2.first;
+					if (feature2umi.find(feature_id) != feature2umi.end())
+						feature2umi[feature_id].emplace_back(std::make_pair(umi_bid, p2.second));
+					else
+						feature2umi[feature_id] = vector(1, std::make_pair(umi_bid, p2.second));
+				}
+			}
+			for (auto& kv: feature2umi) {
+				for (auto& v: kv) {
+					for (int i = 0; i < MAX_UMI_LEN; ++i) {
+						uint64_t val = v.first & aux_arr[i][NNUC];
+						for (int j = 0; j < NNUC; ++j) {
+							if (val != aux_arr[i][j]) {
+								uint64_t bid_new = v.first - val + aux_arr[i][j];
+								ds[i].set_rank()
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+*/
 private:
 	Cell2UMI data_container;
 };
