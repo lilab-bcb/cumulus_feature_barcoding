@@ -281,7 +281,7 @@ void auto_detection() {
 				binary_cb = barcode_to_binary(safe_substr(read1.seq, 0, len_cb));
 				for (int i = 0; i < n_chems; ++i) {
 					//if (chem_cb_indexes[i].find(binary_cb.bid) != chem_cb_indexes[i].end() && (binary_cb.mask & chem_cb_indexes[i][binary_cb.bid].mask) == binary_cb.mask)
-					if (chem_cb_indexes[i].find(binary_cb.bid) != chem_cb_indexes[i].end() && std::popcount(binary_cb.mask) == 0)  // Skip reads with cell barcodes containing N's
+					if (chem_cb_indexes[i].find(binary_cb.bid) != chem_cb_indexes[i].end() && std::popcount(binary_cb.mask | chem_cb_indexes[i][binary_cb.bid].mask) == 0)  // Skip reads with cell barcodes containing N's
 						++chem_cnts[i];
 				}
 				++cnt;
@@ -355,13 +355,13 @@ void auto_detection() {
 						binary_feature = barcode_to_binary(safe_substr(read2.seq, totalseq_A_pos, feature_blen));
 						feature_iter = feature_index.find(binary_feature.bid);
 						//ntotA += (feature_iter != feature_index.end() && feature_iter->second.vid >= 0 && (binary_feature.mask & feature_iter->second.mask) == binary_feature.mask);
-						ntotA += (feature_iter != feature_index.end() && feature_iter->second.vid >= 0 && std::popcount(binary_feature.mask) <= max_mismatch_feature);
+						ntotA += (feature_iter != feature_index.end() && feature_iter->second.vid >= 0 && std::popcount(binary_feature.mask | feature_iter->second.mask) <= max_mismatch_feature);
 
 						if (read2.seq.length() >= totalseq_BC_pos + feature_blen) {
 							binary_feature = barcode_to_binary(safe_substr(read2.seq, totalseq_BC_pos, feature_blen));
 							feature_iter = feature_index.find(binary_feature.bid);
 							//ntotC += (feature_iter != feature_index.end() && feature_iter->second.vid >= 0 && (binary_feature.mask & feature_iter->second.mask) == binary_feature.mask);
-							ntotC += (feature_iter != feature_index.end() && feature_iter->second.vid >= 0 && std::popcount(binary_feature.mask) <= max_mismatch_feature);
+							ntotC += (feature_iter != feature_index.end() && feature_iter->second.vid >= 0 && std::popcount(binary_feature.mask | feature_iter->second.mask) <= max_mismatch_feature);
 						}
 						++cnt;
 					}
@@ -462,14 +462,14 @@ void process_reads(ReadParser *parser, int thread_id) {
 			binary_cell = barcode_to_binary(cell_barcode);
 			cell_iter = cell_index.find(binary_cell.bid);
 			//valid_cell = cell_iter != cell_index.end() && cell_iter->second.vid >= 0 && (binary_cell.mask & cell_iter->second.mask) == binary_cell.mask;
-			valid_cell = cell_iter != cell_index.end() && cell_iter->second.vid >= 0 && std::popcount(binary_cell.mask) <= max_mismatch_cell;
+			valid_cell = cell_iter != cell_index.end() && cell_iter->second.vid >= 0 && std::popcount(binary_cell.mask | cell_iter->second.mask) <= max_mismatch_cell;
 
 			valid_feature = extract_feature_barcode(read2.seq, feature_blen, feature_type, feature_barcode);
 			if (valid_feature) {
 				binary_feature = barcode_to_binary(feature_barcode);
 				feature_iter = feature_index.find(binary_feature.bid);
 				//valid_feature = feature_iter != feature_index.end() && feature_iter->second.vid >= 0 && (binary_feature.mask & feature_iter->second.mask) == binary_feature.mask;
-				valid_feature = feature_iter != feature_index.end() && feature_iter->second.vid >= 0 && std::popcount(binary_feature.mask) <= max_mismatch_feature;
+				valid_feature = feature_iter != feature_index.end() && feature_iter->second.vid >= 0 && std::popcount(binary_feature.mask | feature_iter->second.mask) <= max_mismatch_feature;
 			}
 
 			n_valid_cell_ += valid_cell;
