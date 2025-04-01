@@ -280,7 +280,8 @@ void auto_detection() {
 			while (gzip_in_r1.next(read1) && cnt < nskim) {
 				binary_cb = barcode_to_binary(safe_substr(read1.seq, 0, len_cb));
 				for (int i = 0; i < n_chems; ++i) {
-					if (chem_cb_indexes[i].find(binary_cb.bid) != chem_cb_indexes[i].end() && (binary_cb.mask & chem_cb_indexes[i][binary_cb.bid].mask) == binary_cb.mask)
+					//if (chem_cb_indexes[i].find(binary_cb.bid) != chem_cb_indexes[i].end() && (binary_cb.mask & chem_cb_indexes[i][binary_cb.bid].mask) == binary_cb.mask)
+					if (chem_cb_indexes[i].find(binary_cb.bid) != chem_cb_indexes[i].end() && std::popcount(binary_cb.mask) == 0)  // Skip reads with cell barcodes containing N's
 						++chem_cnts[i];
 				}
 				++cnt;
@@ -353,12 +354,14 @@ void auto_detection() {
 					while (gzip_in_r2.next(read2) && cnt < nskim) {
 						binary_feature = barcode_to_binary(safe_substr(read2.seq, totalseq_A_pos, feature_blen));
 						feature_iter = feature_index.find(binary_feature.bid);
-						ntotA += (feature_iter != feature_index.end() && feature_iter->second.vid >= 0 && (binary_feature.mask & feature_iter->second.mask) == binary_feature.mask);
+						//ntotA += (feature_iter != feature_index.end() && feature_iter->second.vid >= 0 && (binary_feature.mask & feature_iter->second.mask) == binary_feature.mask);
+						ntotA += (feature_iter != feature_index.end() && feature_iter->second.vid >= 0 && std::popcount(binary_feature.mask) <= max_mismatch_feature);
 
 						if (read2.seq.length() >= totalseq_BC_pos + feature_blen) {
 							binary_feature = barcode_to_binary(safe_substr(read2.seq, totalseq_BC_pos, feature_blen));
 							feature_iter = feature_index.find(binary_feature.bid);
-							ntotC += (feature_iter != feature_index.end() && feature_iter->second.vid >= 0 && (binary_feature.mask & feature_iter->second.mask) == binary_feature.mask);
+							//ntotC += (feature_iter != feature_index.end() && feature_iter->second.vid >= 0 && (binary_feature.mask & feature_iter->second.mask) == binary_feature.mask);
+							ntotC += (feature_iter != feature_index.end() && feature_iter->second.vid >= 0 && std::popcount(binary_feature.mask) <= max_mismatch_feature);
 						}
 						++cnt;
 					}
@@ -458,28 +461,19 @@ void process_reads(ReadParser *parser, int thread_id) {
 			cell_barcode = safe_substr(read1.seq, 0, cell_blen);
 			binary_cell = barcode_to_binary(cell_barcode);
 			cell_iter = cell_index.find(binary_cell.bid);
-			valid_cell = cell_iter != cell_index.end() && cell_iter->second.vid >= 0 && (binary_cell.mask & cell_iter->second.mask) == binary_cell.mask;
+			//valid_cell = cell_iter != cell_index.end() && cell_iter->second.vid >= 0 && (binary_cell.mask & cell_iter->second.mask) == binary_cell.mask;
+			valid_cell = cell_iter != cell_index.end() && cell_iter->second.vid >= 0 && std::popcount(binary_cell.mask) <= max_mismatch_cell;
 
 			valid_feature = extract_feature_barcode(read2.seq, feature_blen, feature_type, feature_barcode);
 			if (valid_feature) {
 				binary_feature = barcode_to_binary(feature_barcode);
 				feature_iter = feature_index.find(binary_feature.bid);
-				valid_feature = feature_iter != feature_index.end() && feature_iter->second.vid >= 0 && (binary_feature.mask & feature_iter->second.mask) == binary_feature.mask;
+				//valid_feature = feature_iter != feature_index.end() && feature_iter->second.vid >= 0 && (binary_feature.mask & feature_iter->second.mask) == binary_feature.mask;
+				valid_feature = feature_iter != feature_index.end() && feature_iter->second.vid >= 0 && std::popcount(binary_feature.mask) <= max_mismatch_feature;
 			}
 
 			n_valid_cell_ += valid_cell;
 			n_valid_feature_ += valid_feature;
-
-			// Debug
-			umi = safe_substr(read1.seq, cell_blen, umi_len);
-			binary_umi = barcode_to_binary(umi);
-			if (umi == "CGATTACCGGCA" && cell_barcode == "CTTGCCCGTTGCCTGG") {
-				if (feature_iter == feature_index.end())
-					printf("Feature %s is not in the mapped.\n", feature_barcode.c_str());
-				else {
-					printf("Get a read with feature seq %s of mask %d; hitting index seq %s of mask %d\n", feature_barcode.c_str(), binary_feature.mask, binary_to_barcode(BinaryCodeType(feature_iter->first, feature_iter->second.mask), feature_blen).c_str(), feature_iter->second.mask);
-				}
-			}
 
 			if (valid_cell && valid_feature) {
 				++n_valid_;

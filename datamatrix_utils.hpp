@@ -113,14 +113,14 @@ public:
 		std::vector<std::vector<int> > ADTs(feature_end - feature_start, dummy);
 
 		oGZipFile gout(output_name + ".stat.csv.gz", n_threads);
-		gout.write("Barcode,UMI,Feature,Count\n");
+		gout.write("Barcode,Feature,UMI,Count\n");
 		for (int i = 0; i < total_cells; ++i) {
 			auto& one_cell = data_container[cell_ids[i]];
 			for (auto&& kv1 : one_cell) {
 				for (auto&& kv2 : kv1.second) {
 					gout.write(cell_names[cell_ids[i]]); gout.write(',');
-					gout.write(binary_to_barcode(kv2.first, umi_len)); gout.write(',');
 					gout.write(feature_names[kv1.first]); gout.write(',');
+					gout.write(binary_to_barcode(kv2.first, umi_len)); gout.write(',');
 					gout.write(std::to_string(kv2.second)); gout.write('\n');
 					total_reads += kv2.second;
 					++total_umis;
