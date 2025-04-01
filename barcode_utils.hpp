@@ -267,7 +267,7 @@ void insert_mutated_index(HashType& index_dict, int barcode_len, int max_mismatc
 							if (!insert(index_dict, bid_new, ValueType(index_val.vid, mask), index_ret)) {
 								early_stop = true;
 							}
-							buffer2->emplace(IndexType(bid_new, index_val.vid, mask));
+							buffer2->emplace(bid_new, index_val.vid, mask);
 						}
 				}
 			}
