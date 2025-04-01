@@ -77,9 +77,9 @@ vector<DataCollector> dataCollectors;
 
 struct result_t {
 	int cell_id, feature_id;
-	uint64_t umi;
+	BinaryCodeType umi;
 
-	result_t(int cell_id, uint64_t umi, int feature_id) : cell_id(cell_id), feature_id(feature_id), umi(umi) {}
+	result_t(int cell_id, int feature_id, BinaryCodeType umi) : cell_id(cell_id), feature_id(feature_id), umi(umi) {}
 };
 
 vector<vector<vector<result_t>>> result_buffer;
@@ -280,7 +280,7 @@ void auto_detection() {
 			while (gzip_in_r1.next(read1) && cnt < nskim) {
 				binary_cb = barcode_to_binary(safe_substr(read1.seq, 0, len_cb));
 				for (int i = 0; i < n_chems; ++i) {
-					if (chem_cb_indexes[i].find(binary_cb.bid) != chem_cb_indexes[i].end())
+					if (chem_cb_indexes[i].find(binary_cb.bid) != chem_cb_indexes[i].end() && (binary_cb.mask & chem_cb_indexes[i][binary_cb.bid].mask) == binary_cb.mask)
 						++chem_cnts[i];
 				}
 				++cnt;
@@ -353,12 +353,12 @@ void auto_detection() {
 					while (gzip_in_r2.next(read2) && cnt < nskim) {
 						binary_feature = barcode_to_binary(safe_substr(read2.seq, totalseq_A_pos, feature_blen));
 						feature_iter = feature_index.find(binary_feature.bid);
-						ntotA += (feature_iter != feature_index.end() && feature_iter->second.vid >= 0);
+						ntotA += (feature_iter != feature_index.end() && feature_iter->second.vid >= 0 && (binary_feature.mask & feature_iter->second.mask) == binary_feature.mask);
 
 						if (read2.seq.length() >= totalseq_BC_pos + feature_blen) {
 							binary_feature = barcode_to_binary(safe_substr(read2.seq, totalseq_BC_pos, feature_blen));
 							feature_iter = feature_index.find(binary_feature.bid);
-							ntotC += (feature_iter != feature_index.end() && feature_iter->second.vid >= 0);
+							ntotC += (feature_iter != feature_index.end() && feature_iter->second.vid >= 0 && (binary_feature.mask & feature_iter->second.mask) == binary_feature.mask);
 						}
 						++cnt;
 					}
@@ -470,6 +470,17 @@ void process_reads(ReadParser *parser, int thread_id) {
 			n_valid_cell_ += valid_cell;
 			n_valid_feature_ += valid_feature;
 
+			// Debug
+			umi = safe_substr(read1.seq, cell_blen, umi_len);
+			binary_umi = barcode_to_binary(umi);
+			if (umi == "CGATTACCGGCA" && cell_barcode == "CTTGCCCGTTGCCTGG") {
+				if (feature_iter == feature_index.end())
+					printf("Feature %s is not in the mapped.\n", feature_barcode.c_str());
+				else {
+					printf("Get a read with feature seq %s of mask %d; hitting index seq %s of mask %d\n", feature_barcode.c_str(), binary_feature.mask, binary_to_barcode(BinaryCodeType(feature_iter->first, feature_iter->second.mask), feature_blen).c_str(), feature_iter->second.mask);
+				}
+			}
+
 			if (valid_cell && valid_feature) {
 				++n_valid_;
 				read1_len = read1.seq.length();
@@ -483,14 +494,14 @@ void process_reads(ReadParser *parser, int thread_id) {
 				cell_id = cell_iter->second.vid;
 				feature_id = feature_iter->second.vid;
 				collector_pos = detected_ftype ? feature_categories[feature_id] : 0;
-				buffer[collector_pos].emplace_back(cell_id, binary_umi.bid, feature_id);
+				buffer[collector_pos].emplace_back(cell_id, feature_id, binary_umi);
 			}
 		}
 
 		for (int i = 0; i < n_cat; ++i) {
 			auto& dataCollector = dataCollectors[i];
 			collector_locks[i]->lock();
-			for (auto& r : buffer[i]) dataCollector.insert(r.cell_id, r.umi, r.feature_id);
+			for (auto& r : buffer[i]) dataCollector.insert(r.cell_id, r.feature_id, r.umi);
 			collector_locks[i]->unlock();
 		}
 

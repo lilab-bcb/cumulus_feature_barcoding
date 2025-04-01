@@ -13,6 +13,7 @@
 #include <numeric>
 #include <bit>
 #include <utility>
+#include <functional>
 
 
 struct BinaryCodeType {
@@ -21,6 +22,17 @@ struct BinaryCodeType {
 
 	BinaryCodeType(): bid(0), mask(0) {}
 	BinaryCodeType(uint64_t bid, uint32_t mask): bid(bid), mask(mask) {}
+
+	bool operator==(const BinaryCodeType& other) const {
+        return (bid == other.bid) && (mask == other.mask);
+    }
+};
+
+struct BinaryCodeTypeHash {
+    std::size_t operator()(const BinaryCodeType& bct) const {
+        // Combine the hash of bid and mask
+        return std::hash<uint64_t>()(bct.bid) ^ (std::hash<uint32_t>()(bct.mask) << 1);
+    }
 };
 
 struct ValueType {
@@ -29,10 +41,6 @@ struct ValueType {
 
 	ValueType() : vid(-1), mask(0) {}
 	ValueType(int vid, uint32_t mask) : vid(vid), mask(mask) {}
-
-	bool is_mutated_from(uint32_t& m) {
-		return (mask & m) == m;
-	}
 };
 
 struct IndexType {
@@ -241,6 +249,7 @@ inline void skip_bom(std::string& line) {
 
 void insert_mutated_index(HashType& index_dict, int barcode_len, int max_mismatch, std::queue<IndexType>* buffer1, std::queue<IndexType>* buffer2, bool verbose = true) {
 	int cur_mismatch = 1;
+	bool early_stop = false;
 	while (cur_mismatch <= max_mismatch) {
 		while (!buffer1->empty()) {
 			IndexType& index_val = buffer1->front();
@@ -256,14 +265,17 @@ void insert_mutated_index(HashType& index_dict, int barcode_len, int max_mismatc
 							uint64_t bid_new = index_val.bid - val + aux_arr[i][j];
 							IndexType index_ret;
 							if (!insert(index_dict, bid_new, ValueType(index_val.vid, mask), index_ret)) {
-								if (verbose) printf("max_mismatch %d is too high. Reset to %d.\n", max_mismatch, cur_mismatch - 1);
-								return;
+								early_stop = true;
 							}
 							buffer2->emplace(IndexType(bid_new, index_val.vid, mask));
 						}
 				}
 			}
 			buffer1->pop();
+		}
+		if (early_stop && cur_mismatch < max_mismatch) {
+			if (verbose) printf("max_mismatch %d is too high. Reset to %d.\n", max_mismatch, cur_mismatch);
+			return;
 		}
 		std::swap(buffer1, buffer2);
 		++cur_mismatch;
