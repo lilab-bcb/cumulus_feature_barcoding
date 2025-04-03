@@ -353,12 +353,12 @@ void auto_detection() {
 					while (gzip_in_r2.next(read2) && cnt < nskim) {
 						binary_feature = barcode_to_binary(safe_substr(read2.seq, totalseq_A_pos, feature_blen));
 						feature_iter = feature_index.find(binary_feature);
-						ntotA += (feature_iter != feature_index.end() && feature_iter->second.item_id >= 0);
+						ntotA += (feature_iter != feature_index.end() && feature_iter->second.vid >= 0);
 
 						if (read2.seq.length() >= totalseq_BC_pos + feature_blen) {
 							binary_feature = barcode_to_binary(safe_substr(read2.seq, totalseq_BC_pos, feature_blen));
 							feature_iter = feature_index.find(binary_feature);
-							ntotC += (feature_iter != feature_index.end() && feature_iter->second.item_id >= 0);
+							ntotC += (feature_iter != feature_index.end() && feature_iter->second.vid >= 0);
 						}
 						++cnt;
 					}
@@ -458,13 +458,13 @@ void process_reads(ReadParser *parser, int thread_id) {
 			cell_barcode = safe_substr(read1.seq, 0, cell_blen);
 			binary_cell = barcode_to_binary(cell_barcode);
 			cell_iter = cell_index.find(binary_cell);
-			valid_cell = cell_iter != cell_index.end() && cell_iter->second.item_id >= 0;
+			valid_cell = cell_iter != cell_index.end() && cell_iter->second.vid >= 0;
 
 			valid_feature = extract_feature_barcode(read2.seq, feature_blen, feature_type, feature_barcode);
 			if (valid_feature) {
 				binary_feature = barcode_to_binary(feature_barcode);
 				feature_iter = feature_index.find(binary_feature);
-				valid_feature = feature_iter != feature_index.end() && feature_iter->second.item_id >= 0;
+				valid_feature = feature_iter != feature_index.end() && feature_iter->second.vid >= 0;
 			}
 
 			n_valid_cell_ += valid_cell;
@@ -480,8 +480,8 @@ void process_reads(ReadParser *parser, int thread_id) {
 				umi = safe_substr(read1.seq, cell_blen, umi_len);
 				binary_umi = barcode_to_binary(umi);
 
-				cell_id = cell_iter->second.item_id;
-				feature_id = feature_iter->second.item_id;
+				cell_id = cell_iter->second.vid;
+				feature_id = feature_iter->second.vid;
 				collector_pos = detected_ftype ? feature_categories[feature_id] : 0;
 				buffer[collector_pos].emplace_back(cell_id, feature_id, binary_umi);
 			}
