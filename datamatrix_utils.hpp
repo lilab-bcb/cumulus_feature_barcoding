@@ -13,9 +13,9 @@
 #include "gzip_utils.hpp"
 #include "barcode_utils.hpp"
 
-typedef std::unordered_map<int, int> Feature2Count;
-typedef std::unordered_map<uint64_t, Feature2Count> UMI2Feature;
-typedef std::unordered_map<int, UMI2Feature> Cell2UMI;
+typedef std::unordered_map<uint64_t, int> UMI2Count;
+typedef std::unordered_map<int, UMI2Count> Feature2UMI;
+typedef std::unordered_map<int, Feature2UMI> Cell2Feature;
 
 class DataCollector {
 public:
@@ -23,8 +23,8 @@ public:
 
 	void clear() { data_container.clear(); }
 
-	void insert(int cell_id, uint64_t umi, int feature_id) {
-		++data_container[cell_id][umi][feature_id];
+	void insert(int cell_id, int feature_id, uint64_t umi) {
+		++data_container[cell_id][feature_id][umi];
 	}
 
 	void output(const std::string& output_name, const std::string& feature_type, int feature_start, int feature_end, const std::vector<std::string>& cell_names, int umi_len, const std::vector<std::string>& feature_names, std::ofstream& freport, int n_threads) {
@@ -43,18 +43,18 @@ public:
 		std::vector<std::vector<int> > ADTs(feature_end - feature_start, dummy);
 
 		oGZipFile gout(output_name + ".stat.csv.gz", n_threads);
-		gout.write("Barcode,UMI,Feature,Count\n");
+		gout.write("Barcode,Feature,UMI,Count\n");
 		for (int i = 0; i < total_cells; ++i) {
 			auto& one_cell = data_container[cell_ids[i]];
 			for (auto&& kv1 : one_cell) {
 				for (auto&& kv2 : kv1.second) {
 					gout.write(cell_names[cell_ids[i]]); gout.write(',');
-					gout.write(binary_to_barcode(kv1.first, umi_len)); gout.write(',');
-					gout.write(feature_names[kv2.first]); gout.write(',');
+					gout.write(feature_names[kv1.first]); gout.write(',');
+					gout.write(binary_to_barcode(kv2.first, umi_len)); gout.write(',');
 					gout.write(std::to_string(kv2.second)); gout.write('\n');
 					total_reads += kv2.second;
 					++total_umis;
-					++ADTs[kv2.first - feature_start][i];
+					++ADTs[kv1.first - feature_start][i];
 					++tot_umis[i];
 				}
 			}
@@ -86,7 +86,7 @@ public:
 	}
 
 private:
-	Cell2UMI data_container;
+	Cell2Feature data_container;
 };
 
 #endif

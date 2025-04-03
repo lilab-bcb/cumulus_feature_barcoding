@@ -10,6 +10,9 @@
 #include <unordered_map>
 #include <algorithm>
 #include <numeric>
+#include <queue>
+#include <utility>
+
 
 struct ValueType {
 	int item_id;
@@ -21,6 +24,16 @@ struct ValueType {
 
 typedef std::unordered_map<uint64_t, ValueType> HashType;
 typedef HashType::iterator HashIterType;
+
+struct IndexType {
+	uint64_t bid;
+	int item_id;
+	char n_mis;
+	int pos;
+
+	IndexType(): bid(0), item_id(-1), n_mis(0), pos(0) {}
+	IndexType(uint64_t bid, int item_id, char n_mis, int pos): bid(bid), item_id(item_id), n_mis(n_mis), pos(pos) {}
+};
 
 const int STEP = 3;
 const int BASE = 7;
@@ -94,22 +107,26 @@ std::string binary_to_barcode(uint64_t binary_id, int len) {
 	return barcode;
 }
 
-inline bool insert(HashType& index_dict, uint64_t key, ValueType&& value) {
+inline bool insert(HashType& index_dict, uint64_t key, ValueType&& value, int pos, IndexType& record) {
 	std::pair<HashIterType, bool> ret;
 	ret = index_dict.insert(std::make_pair(key, value));
+	record.bid = key;
+	record.item_id = value.item_id;
+	record.n_mis = value.n_mis;
+	record.pos = pos;
 	if (ret.second) return true;
 	if (ret.first->second.n_mis == 0 && value.n_mis == 0) {
 		printf("Cumulus identified two identical barcodes! Please check your barcode file.\n");
 		exit(-1);
 	}
-	if (ret.first->second.n_mis == 0 || value.n_mis == 0) {
-		printf("Mismatch value is too large. Please decrease the number of mismatches allowed.\n");
-		exit(-1);
+	if (ret.first->second.n_mis == value.n_mis) {
+		ret.first->second.item_id = -1;
+		return false;
 	}
-	ret.first->second.item_id = -1;
-	return false;
+	return true;
 }
 
+/*
 inline void mutate_index_one_mismatch(HashType& index_dict, std::string& barcode, int item_id) {
 	int len = barcode.length();
 	uint64_t binary_id = barcode_to_binary(barcode);
@@ -136,6 +153,7 @@ inline void mutate_index(HashType& index_dict, uint64_t binary_id, int len, int 
 			}
 	}
 }
+*/
 
 inline void ltrim(std::string &s) {
     s.erase(s.begin(), std::find_if(s.begin(), s.end(), [](unsigned char ch) {
@@ -187,7 +205,7 @@ inline void group_by_modality(HashType& index_dict, std::vector<std::string>& in
 	}
 }
 
-inline void parse_one_line(const std::string& line, int& n_barcodes, int& barcode_len, HashType& index_dict, std::vector<std::string>& index_names, int max_mismatch) {
+inline void parse_one_line(const std::string& line, int& n_barcodes, int& barcode_len, HashType& index_dict, std::vector<std::string>& index_names, int max_mismatch, std::queue<IndexType>* buffer) {
 	std::string index_name, index_seq;
 	std::size_t pos;
 
@@ -201,11 +219,18 @@ inline void parse_one_line(const std::string& line, int& n_barcodes, int& barcod
 
 	if (index_seq.empty() && index_name.empty()) return;
 
-	if (barcode_len == 0) barcode_len = index_seq.length();
-	else assert(barcode_len == index_seq.length());
+	if (barcode_len == 0) {
+		barcode_len = index_seq.length();
+		assert(barcode_len <= UPPER);
+	} else
+		assert(barcode_len == index_seq.length());
 
-	if (max_mismatch == 1) mutate_index_one_mismatch(index_dict, index_seq, n_barcodes);
-	else mutate_index(index_dict, barcode_to_binary(index_seq), index_seq.length(), n_barcodes, max_mismatch, 0, 0);
+	IndexType index_record;
+	insert(index_dict, barcode_to_binary(index_seq), ValueType(n_barcodes, 0), 0, index_record);
+	buffer->emplace(index_record);
+
+	//if (max_mismatch == 1) mutate_index_one_mismatch(index_dict, index_seq, n_barcodes);
+	//else mutate_index(index_dict, barcode_to_binary(index_seq), index_seq.length(), n_barcodes, max_mismatch, 0, 0);
 
 	index_names.push_back(index_name);
 	++n_barcodes;
@@ -224,6 +249,36 @@ inline void skip_bom(std::string& line) {
 	line = line.substr(start);
 }
 
+void insert_index_mutations(HashType& index_dict, int barcode_len, int max_mismatch, std::queue<IndexType>* buffer1, std::queue<IndexType>* buffer2, bool verbose = true) {
+	int cur_mismatch = 1;
+	bool early_stop = false;
+	while (cur_mismatch <= max_mismatch) {
+		while (!buffer1->empty()) {
+			IndexType& index_val = buffer1->front();
+			if (index_val.n_mis < max_mismatch) {
+				for (int i = index_val.pos; i < barcode_len; ++i) {
+					uint64_t val = index_val.bid & aux_arr[i][NNUC];
+					for (int j = 0; j < NNUC; ++j)
+						if (val != aux_arr[i][j]) {
+							uint64_t bid_new = index_val.bid - val + aux_arr[i][j];
+							IndexType index_ret;
+							if (!insert(index_dict, bid_new, ValueType(index_val.item_id, index_val.n_mis + 1), i + 1, index_ret))
+								early_stop = true;
+							buffer2->emplace(bid_new, index_val.item_id, index_val.n_mis + 1, i + 1);
+						}
+				}
+			}
+			buffer1->pop();
+		}
+		if (early_stop && cur_mismatch < max_mismatch) {
+			if (verbose) printf("max_mismatch %d is too high. Reset to %d.\n", max_mismatch, cur_mismatch);
+			return;
+		}
+		std::swap(buffer1, buffer2);
+		++cur_mismatch;
+	}
+}
+
 void parse_sample_sheet(const std::string& sample_sheet_file, int& n_barcodes, int& barcode_len, HashType& index_dict, std::vector<std::string>& index_names, int max_mismatch = 1, bool verbose = true) {
 	std::string line;
 
@@ -233,6 +288,8 @@ void parse_sample_sheet(const std::string& sample_sheet_file, int& n_barcodes, i
 	index_names.clear();
 
 	bool is_first_line = true;
+	std::queue<IndexType>* buffer1 = new std::queue<IndexType>();
+	std::queue<IndexType>* buffer2 = new std::queue<IndexType>();
 
 	if (sample_sheet_file.length() > 3 && sample_sheet_file.substr(sample_sheet_file.length() - 3, 3) == ".gz") { // input sample sheet is gzipped
 		iGZipFile gin(sample_sheet_file);
@@ -241,7 +298,7 @@ void parse_sample_sheet(const std::string& sample_sheet_file, int& n_barcodes, i
 				skip_bom(line);
 				is_first_line = false;
 			}
-			parse_one_line(line, n_barcodes, barcode_len, index_dict, index_names, max_mismatch);
+			parse_one_line(line, n_barcodes, barcode_len, index_dict, index_names, max_mismatch, buffer1);
 		}
 	}
 	else {
@@ -251,10 +308,13 @@ void parse_sample_sheet(const std::string& sample_sheet_file, int& n_barcodes, i
 				skip_bom(line);
 				is_first_line = false;
 			}
-			parse_one_line(line, n_barcodes, barcode_len, index_dict, index_names, max_mismatch);
+			parse_one_line(line, n_barcodes, barcode_len, index_dict, index_names, max_mismatch, buffer1);
 		}
 		fin.close();
 	}
+
+	insert_index_mutations(index_dict, barcode_len, max_mismatch, buffer1, buffer2, verbose);
+
 	if (verbose) printf("%s is parsed. n_barcodes = %d, and barcode_len = %d.\n", sample_sheet_file.c_str(), n_barcodes, barcode_len);
 
 	int n_amb = 0;

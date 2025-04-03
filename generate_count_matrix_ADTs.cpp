@@ -79,7 +79,7 @@ struct result_t {
 	int cell_id, feature_id;
 	uint64_t umi;
 
-	result_t(int cell_id, uint64_t umi, int feature_id) : cell_id(cell_id), feature_id(feature_id), umi(umi) {}
+	result_t(int cell_id, int feature_id, uint64_t umi) : cell_id(cell_id), feature_id(feature_id), umi(umi) {}
 };
 
 vector<vector<vector<result_t>>> result_buffer;
@@ -134,7 +134,7 @@ void parse_input_directory(char* input_dirs) {
 			vector<string> one_pair(2);
 			one_pair[0] = dir_name + mate1s[i];
 			one_pair[1] = dir_name + mate2s[i];
-			inputs.push_back(move(one_pair));
+			inputs.push_back(std::move(one_pair));
 		}
 
 		input_dir = strtok(NULL, ",");
@@ -483,14 +483,14 @@ void process_reads(ReadParser *parser, int thread_id) {
 				cell_id = cell_iter->second.item_id;
 				feature_id = feature_iter->second.item_id;
 				collector_pos = detected_ftype ? feature_categories[feature_id] : 0;
-				buffer[collector_pos].emplace_back(cell_id, binary_umi, feature_id);
+				buffer[collector_pos].emplace_back(cell_id, feature_id, binary_umi);
 			}
 		}
 
 		for (int i = 0; i < n_cat; ++i) {
 			auto& dataCollector = dataCollectors[i];
 			collector_locks[i]->lock();
-			for (auto& r : buffer[i]) dataCollector.insert(r.cell_id, r.umi, r.feature_id);
+			for (auto& r : buffer[i]) dataCollector.insert(r.cell_id, r.feature_id, r.umi);
 			collector_locks[i]->unlock();
 		}
 
