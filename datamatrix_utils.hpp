@@ -17,6 +17,142 @@ typedef std::unordered_map<uint64_t, int> UMI2Count;
 typedef std::unordered_map<int, UMI2Count> Feature2UMI;
 typedef std::unordered_map<int, Feature2UMI> Cell2Feature;
 
+typedef std::unordered_map<uint64_t, int> UMITable;
+typedef UMITable::iterator UMITableIter;
+
+class DisjointSet {
+	private:
+		std::vector<uint64_t> bid;
+		std::vector<int> count;
+		std::vector<int> parent;
+		std::vector<int> rank;
+		std::vector<int> max_count;
+
+		std::vector<int> path;
+	public:
+		DisjointSet() {}
+
+		void init(UMI2Count umi2count) {
+			int n = umi2count.size();
+
+			bid = std::vector<uint64_t>(n, 0);
+			count = std::vector<int>(n, 0);
+			parent = std::vector<int>(n, -1);
+			rank = std::vector<int>(n, 0);
+			max_count = std::vector<int>(n, 0);
+
+			int i = 0;
+			for (auto& kv: umi2count) {
+				bid[i] = kv.first;
+				count[i] = kv.second;
+				parent[i] = i;
+				max_count[i] = i;
+				++i;
+			}
+		}
+
+		std::vector<uint64_t>& get_bid() {
+			return bid;
+		}
+
+		int find_set(int i) { // with path compression optimization
+			path.clear();
+			while (i != parent[i]) {
+				path.push_back(i);
+				i = parent[i];
+			}
+			for (int& v: path)
+				parent[v] = i;
+			return i;
+		}
+
+		void union_sets(int a, int b) {
+			a = find_set(a);
+			b = find_set(b);
+
+			if (a != b) {
+				if (rank[a] <= rank[b]) {
+					parent[a] = b;
+					if ((count[max_count[a]] > count[max_count[b]]) || (count[max_count[a]] == count[max_count[b]] && bid[max_count[a]] < bid[max_count[b]]))
+						max_count[b] = max_count[a];
+				} else if (rank[a] > rank[b]) {
+					parent[b] = a;
+					if ((count[max_count[a]] < count[max_count[b]]) || (count[max_count[a]] == count[max_count[b]] && bid[max_count[a]] > bid[max_count[b]]))
+						max_count[a] = max_count[b];
+				}
+				if (rank[a] == rank[b])
+					++rank[b];
+			}
+		}
+
+		bool connected(int a, int b) {
+			return find_set(a) == find_set(b);
+		}
+
+		UMI2Count get_roots() {
+			UMI2Count res;
+			UMI2Count::iterator it;
+
+			for (int i = 0; i < bid.size(); ++i) {
+				int root = find_set(i);
+				it = res.find(bid[max_count[root]]);
+				if (it != res.end())
+					it->second += count[i];
+				else
+					res.insert(std::make_pair(bid[max_count[root]], count[i]));
+			}
+			return res;
+		}
+
+		void clear() {
+			bid.clear();
+			count.clear();
+			parent.clear();
+			rank.clear();
+			max_count.clear();
+		}
+};
+
+class UMICorrectSet {
+	private:
+		std::vector<UMITable> match_tables;
+		DisjointSet ds;
+		int umi_length;
+
+		void insert_or_merge() {
+			int n_umis = this->ds.get_bid().size();
+			for (int i = 0; i < n_umis; ++i)
+				for (int j = 0; j < this->umi_length; ++j) {
+					uint64_t bid_sub = this->ds.get_bid()[i] & (~aux_arr[j][NNUC]);
+					std::pair<UMITableIter, bool> ret;
+					ret = match_tables[j].insert(std::make_pair(bid_sub, i));
+					if (!ret.second)
+						this->ds.union_sets(ret.first->second, i);
+				}
+		}
+
+	public:
+		UMICorrectSet(int umi_length): umi_length(umi_length) {
+			this->match_tables = std::vector<UMITable>(umi_length, UMITable());
+		}
+
+		void clear() {
+			for (int i = 0; i < this->umi_length; ++i)
+				this->match_tables[i].clear();
+			this->ds.clear();
+		}
+
+		void build_set(UMI2Count umi2count) {
+			this->ds.init(umi2count);
+			insert_or_merge();
+		}
+
+		UMI2Count get_corrected_umi_counts() {
+			return this->ds.get_roots();
+		}
+
+};
+
 class DataCollector {
 public:
 	DataCollector() { clear(); }
@@ -83,6 +219,19 @@ public:
 		freport<< "Number of valid UMIs (with matching cell and feature barcodes): "<< total_umis<< std::endl;
 		freport<< "Mean number of valid UMIs per cell barcode: "<< std::fixed<< std::setprecision(2)<< (total_cells > 0 ? total_umis * 1.0 / total_cells : 0.0)<< std::endl;
 		freport<< "Sequencing saturation: "<< std::fixed<< std::setprecision(2)<< (total_reads > 0 ? 100.0 - total_umis * 100.0 / total_reads : 0.0)<< "%"<< std::endl;
+	}
+
+	void correct_umi(int umi_length, const std::vector<std::string>& cell_names, const std::vector<std::string>& feature_names) {
+		UMICorrectSet ucs(umi_length);
+		for (auto& p: data_container) {
+			for (auto& kv: p.second) {
+				if (kv.second.size() == 1)
+					continue;
+				ucs.clear();
+				ucs.build_set(kv.second);
+				data_container[p.first][kv.first] = ucs.get_corrected_umi_counts();
+			}
+		}
 	}
 
 private:

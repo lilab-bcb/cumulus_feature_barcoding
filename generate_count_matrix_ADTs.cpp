@@ -57,6 +57,7 @@ string chemistry;
 atomic<int> cnt, n_valid, n_valid_cell, n_valid_feature, prev_cnt; // cnt: total number of reads; n_valid, reads with valid cell barcode and feature barcode; n_valid_cell, reads with valid cell barcode; n_valid_feature, reads with valid feature barcode; prev_cnt: for printing # of reads processed purpose
 
 int n_threads, max_mismatch_cell, max_mismatch_feature, umi_len;
+bool correct_umi;
 string feature_type, totalseq_type, scaffold_sequence;
 int barcode_pos; // Antibody: Total-Seq A 0; Total-Seq B or C 10. Crispr: default 0, can be set by option
 
@@ -521,6 +522,7 @@ int main(int argc, char* argv[]) {
 		printf("\t--feature feature_type\tfeature type can be either antibody or crispr. [default: antibody]\n");
 		printf("\t--max-mismatch-feature #\tmaximum number of mismatches allowed for feature barcodes. [default: 2]\n");
 		printf("\t--umi-length len\tlength of the UMI sequence. [default: auto-decided by chemistry]\n");
+		printf("\t--correct-umi\tIf correct UMI counts by merging similar UMI sequences as one.\n");
 		printf("\t--barcode-pos #\tstart position of barcode in read 2, 0-based coordinate. [default: automatically determined for antibody; 0 for crispr]\n");
 		printf("\t--scaffold-sequence sequence\tscaffold sequence used to locate the protospacer for sgRNA. This option is only used for crispr data. If --barcode-pos is not set and this option is set, try to locate barcode in front of the specified scaffold sequence.\n");
 		printf("Outputs:\n\toutput_name.csv\tfeature-cell count matrix. First row: [Antibody/CRISPR],barcode_1,...,barcode_n;Other rows: feature_name,feature_count_1,...,feature_count_n.\n");
@@ -538,6 +540,7 @@ int main(int argc, char* argv[]) {
 	feature_type = "antibody";
 	max_mismatch_feature = 2;
 	umi_len = -1;
+	correct_umi = false;
 	barcode_pos = -1;
 	totalseq_type = "";
 	scaffold_sequence = "";
@@ -560,6 +563,9 @@ int main(int argc, char* argv[]) {
 		}
 		if (!strcmp(argv[i], "--umi-length")) {
 			umi_len = atoi(argv[i + 1]);
+		}
+		if (!strcmp(argv[i], "--correct-umi")) {
+			correct_umi = true;
 		}
 		if (!strcmp(argv[i], "--barcode-pos")) {
 			barcode_pos = atoi(argv[i + 1]);
@@ -641,6 +647,26 @@ int main(int argc, char* argv[]) {
 
 	end_ = time(NULL);
 	printf("Outputs are written. Time spent = %.2fs.\n", difftime(end_, interim_));
+
+	if (correct_umi) {
+		printf("UMI correction is enabled.\n");
+		fout.open(output_name + ".report.txt", std::ios::app);  // In append mode
+		interim_ = time(NULL);
+		for (int i = 0; i < n_cat; ++i)
+			dataCollectors[i].correct_umi(umi_len, cell_names, feature_names);
+		end_ = time(NULL);
+		printf("UMI correction is finished. Time spent = %.2fs.\n", difftime(end_, interim_));
+		interim_ = end_;
+
+		if (!detected_ftype)
+			dataCollectors[0].output(output_name + ".correct", feature_type, 0, n_feature, cell_names, umi_len, feature_names, fout, n_threads);
+		else
+			for (int i = 0; i < n_cat; ++i)
+				dataCollectors[i].output(output_name + "." + cat_names[i] + ".correct", feature_type, cat_nfs[i], cat_nfs[i + 1], cell_names, umi_len, feature_names, fout, n_threads);
+		fout.close();
+		end_ = time(NULL);
+		printf("Corrected outputs are written. Time spent = %.2fs\n", difftime(end_, interim_));
+	}
 
 	printf("Total time spent (not including destruct objects) = %.2fs.\n", difftime(end_, start_));
 
