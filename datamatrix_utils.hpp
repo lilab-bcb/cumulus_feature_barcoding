@@ -7,6 +7,7 @@
 #include <vector>
 #include <iomanip>
 #include <fstream>
+#include <sstream>
 #include <algorithm>
 #include <unordered_map>
 
@@ -163,7 +164,7 @@ public:
 		++data_container[cell_id][feature_id][umi];
 	}
 
-	void output(const std::string& output_name, const std::string& feature_type, int feature_start, int feature_end, const std::vector<std::string>& cell_names, int umi_len, const std::vector<std::string>& feature_names, std::ofstream& freport, int n_threads) {
+	void output(const std::string& output_name, const std::string& feature_type, int feature_start, int feature_end, const std::vector<std::string>& cell_names, int umi_len, const std::vector<std::string>& feature_names, std::ofstream& freport, int n_threads, bool verbose_report = true, bool is_raw = true) {
 		std::vector<int> cell_ids;
 		std::ofstream fout;
 
@@ -212,13 +213,24 @@ public:
 		fout.close();
 		printf("%s.csv is written.\n", output_name.c_str());
 
-		freport<< std::endl<< "Section "<< output_name<< std::endl;
-		freport<< "Number of valid cell barcodes: "<< total_cells<< std::endl;
-		freport<< "Number of valid reads (with matching cell and feature barcodes): "<< total_reads<< std::endl;
-		freport<< "Mean number of valid reads per cell barcode: "<< std::fixed<< std::setprecision(2)<< (total_cells > 0 ? total_reads * 1.0 / total_cells : 0.0)<< std::endl;
-		freport<< "Number of valid UMIs (with matching cell and feature barcodes): "<< total_umis<< std::endl;
-		freport<< "Mean number of valid UMIs per cell barcode: "<< std::fixed<< std::setprecision(2)<< (total_cells > 0 ? total_umis * 1.0 / total_cells : 0.0)<< std::endl;
-		freport<< "Sequencing saturation: "<< std::fixed<< std::setprecision(2)<< (total_reads > 0 ? 100.0 - total_umis * 100.0 / total_reads : 0.0)<< "%"<< std::endl;
+		if (is_raw) {
+			report_buffer << std::endl<< "Section "<< output_name<< std::endl;
+			report_buffer << "Number of valid cell barcodes: "<< total_cells<< std::endl;
+			report_buffer << "Number of valid reads (with matching cell and feature barcodes): "<< total_reads<< std::endl;
+			report_buffer << "Mean number of valid reads per cell barcode: "<< std::fixed<< std::setprecision(2)<< (total_cells > 0 ? total_reads * 1.0 / total_cells : 0.0)<< std::endl;
+			report_buffer << "Number of valid UMIs (with matching cell and feature barcodes): "<< total_umis<< std::endl;
+			report_buffer << "Mean number of valid UMIs per cell barcode: "<< std::fixed<< std::setprecision(2)<< (total_cells > 0 ? total_umis * 1.0 / total_cells : 0.0)<< std::endl;
+			report_buffer << "Sequencing saturation: "<< std::fixed<< std::setprecision(2)<< (total_reads > 0 ? 100.0 - total_umis * 100.0 / total_reads : 0.0)<< "%"<< std::endl;
+		} else {
+			report_buffer << "After UMI correction:" << std::endl;
+			report_buffer << "\tNumber of valid UMIs (with matching cell and feature barcodes): "<< total_umis<< std::endl;
+			report_buffer << "\tMean number of valid UMIs per cell barcode: "<< std::fixed<< std::setprecision(2)<< (total_cells > 0 ? total_umis * 1.0 / total_cells : 0.0)<< std::endl;
+			report_buffer << "\tSequencing saturation: "<< std::fixed<< std::setprecision(2)<< (total_reads > 0 ? 100.0 - total_umis * 100.0 / total_reads : 0.0)<< "%"<< std::endl;
+		}
+
+		if (verbose_report) {
+			freport << report_buffer.str();
+		}
 	}
 
 	void correct_umi(int umi_length, const std::vector<std::string>& cell_names, const std::vector<std::string>& feature_names) {
@@ -236,6 +248,7 @@ public:
 
 private:
 	Cell2Feature data_container;
+	std::ostringstream report_buffer;
 };
 
 #endif

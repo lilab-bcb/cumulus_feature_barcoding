@@ -635,22 +635,18 @@ int main(int argc, char* argv[]) {
 	fout<< "Number of reads with valid cell and feature barcodes: "<< n_valid<< " ("<< fixed<< setprecision(2)<< n_valid * 100.0 / cnt << "%)"<< endl;
 
 	if (!detected_ftype)
-		dataCollectors[0].output(output_name, feature_type, 0, n_feature, cell_names, umi_len, feature_names, fout, n_threads);
+		dataCollectors[0].output(output_name, feature_type, 0, n_feature, cell_names, umi_len, feature_names, fout, n_threads, !correct_umi);
 	else
 		for (int i = 0; i < n_cat; ++i) {
 			printf("Feature '%s':\n", cat_names[i].c_str());
-			dataCollectors[i].output(output_name + "." + cat_names[i], feature_type, cat_nfs[i], cat_nfs[i + 1], cell_names, umi_len, feature_names, fout, n_threads);
+			dataCollectors[i].output(output_name + "." + cat_names[i], feature_type, cat_nfs[i], cat_nfs[i + 1], cell_names, umi_len, feature_names, fout, n_threads, !correct_umi);
 		}
-	fout.close();
-
-	printf("%s.report.txt is written.\n", output_name.c_str());
 
 	end_ = time(NULL);
 	printf("Outputs are written. Time spent = %.2fs.\n", difftime(end_, interim_));
 
 	if (correct_umi) {
 		printf("UMI correction is enabled.\n");
-		fout.open(output_name + ".report.txt", std::ios::app);  // In append mode
 		interim_ = time(NULL);
 		for (int i = 0; i < n_cat; ++i)
 			dataCollectors[i].correct_umi(umi_len, cell_names, feature_names);
@@ -659,14 +655,17 @@ int main(int argc, char* argv[]) {
 		interim_ = end_;
 
 		if (!detected_ftype)
-			dataCollectors[0].output(output_name + ".correct", feature_type, 0, n_feature, cell_names, umi_len, feature_names, fout, n_threads);
+			dataCollectors[0].output(output_name + ".correct", feature_type, 0, n_feature, cell_names, umi_len, feature_names, fout, n_threads, true, false);
 		else
 			for (int i = 0; i < n_cat; ++i)
-				dataCollectors[i].output(output_name + "." + cat_names[i] + ".correct", feature_type, cat_nfs[i], cat_nfs[i + 1], cell_names, umi_len, feature_names, fout, n_threads);
+				dataCollectors[i].output(output_name + "." + cat_names[i] + ".correct", feature_type, cat_nfs[i], cat_nfs[i + 1], cell_names, umi_len, feature_names, fout, n_threads, true, false);
 		fout.close();
 		end_ = time(NULL);
-		printf("Corrected outputs are written. Time spent = %.2fs\n", difftime(end_, interim_));
+		printf("UMI-corrected outputs are written. Time spent = %.2fs\n", difftime(end_, interim_));
 	}
+
+	fout.close();
+	printf("%s.report.txt is written.\n", output_name.c_str());
 
 	printf("Total time spent (not including destruct objects) = %.2fs.\n", difftime(end_, start_));
 
