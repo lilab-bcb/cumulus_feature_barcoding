@@ -153,8 +153,17 @@ class UMICorrectSet {
                     uint64_t bid_sub = this->ds.get_bid()[i] & (~aux_arr[j][NNUC]);
                     UMITableIter it = match_tables[j].find(bid_sub);
                     if (it != match_tables[j].end()) {
+                        if (has_match) {
+                            // Current UMI connects to multiple roots. Set itself as root.
+                            has_match = false;
+                            break;
+                        }
+
                         has_match = true;
-                        if (root == -1 || this->ds.get_count()[root] < this->ds.get_count()[it->second] || (this->ds.get_count()[root] == this->ds.get_count()[it->second] && this->ds.get_bid()[root] > this->ds.get_bid()[it->second]))
+                        if (root == -1
+                            || (this->ds.get_count()[root] < this->ds.get_count()[it->second])
+                            || (this->ds.get_count()[root] == this->ds.get_count()[it->second] && this->ds.get_bid()[root] > this->ds.get_bid()[it->second])
+                           )
                             root = it->second;
                     }
                 }
@@ -181,7 +190,10 @@ class UMICorrectSet {
                     ret = match_tables[j].insert(std::make_pair(bid_sub, i));
                     if (!ret.second && this->ds.get_count()[ret.first->second] >= 2 * this->ds.get_count()[i] - 1) {
                         has_match = true;
-                        if (parent == -1 || this->ds.get_count()[parent] < this->ds.get_count()[ret.first->second] || (this->ds.get_count()[parent] == this->ds.get_count()[ret.first->second] && this->ds.get_bid()[parent] > this->ds.get_bid()[ret.first->second]))
+                        if (parent == -1
+                            || (this->ds.get_count()[parent] < this->ds.get_count()[ret.first->second])
+                            || (this->ds.get_count()[parent] == this->ds.get_count()[ret.first->second] && this->ds.get_bid()[parent] > this->ds.get_bid()[ret.first->second])
+                           )
                             parent = ret.first->second;
                     }
                 }
