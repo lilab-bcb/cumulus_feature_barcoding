@@ -158,13 +158,8 @@ class UMICorrectSet {
                             has_match = false;
                             break;
                         }
-
                         has_match = true;
-                        if (root == -1
-                            || (this->ds.get_count()[root] < this->ds.get_count()[it->second])
-                            || (this->ds.get_count()[root] == this->ds.get_count()[it->second] && this->ds.get_bid()[root] > this->ds.get_bid()[it->second])
-                           )
-                            root = it->second;
+                        root = it->second;
                     }
                 }
 
