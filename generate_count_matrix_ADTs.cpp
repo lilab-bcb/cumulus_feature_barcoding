@@ -58,7 +58,7 @@ atomic<int> cnt, n_valid, n_valid_cell, n_valid_feature, prev_cnt; // cnt: total
 
 int n_threads, max_mismatch_cell, max_mismatch_feature, umi_len;
 bool correct_umi;
-string feature_type, totalseq_type, scaffold_sequence;
+string feature_type, totalseq_type, scaffold_sequence, umi_correct_method;
 int barcode_pos; // Antibody: Total-Seq A 0; Total-Seq B or C 10. Crispr: default 0, can be set by option
 
 time_t start_, interim_, end_;
@@ -510,7 +510,7 @@ void process_reads(ReadParser *parser, int thread_id) {
 
 int main(int argc, char* argv[]) {
 	if (argc < 5) {
-		printf("Usage: generate_count_matrix_ADTs cell_barcodes_dir feature_barcodes.csv fastq_folders output_name [-p #] [--max-mismatch-cell #] [--feature feature_type] [--max-mismatch-feature #] [--umi-length len] [--barcode-pos #] [--convert-cell-barcode] [--scaffold-sequence sequence]\n");
+		printf("Usage: generate_count_matrix_ADTs cell_barcodes_dir feature_barcodes.csv fastq_folders output_name [-p #] [--max-mismatch-cell #] [--feature feature_type] [--max-mismatch-feature #] [--umi-length len] [--correct-umi] [--umi-correct-method <str>] [--barcode-pos #] [--convert-cell-barcode] [--scaffold-sequence sequence]\n");
 		printf("Arguments:\n\tcell_barcodes_dir\tPath to the folder containing 10x genomics barcode inclusion list files, either gzipped or not.\n");
 		printf("\tfeature_barcodes.csv\tfeature barcode file;barcode,feature_name[,feature_category]. Optional feature_category is required only if hashing and citeseq data share the same sample index.\n");
 		printf("\tfastq_folders\tfolder containing all R1 and R2 FASTQ files ending with 001.fastq.gz .\n");
@@ -523,6 +523,7 @@ int main(int argc, char* argv[]) {
 		printf("\t--max-mismatch-feature #\tmaximum number of mismatches allowed for feature barcodes. [default: 2]\n");
 		printf("\t--umi-length len\tlength of the UMI sequence. [default: auto-decided by chemistry]\n");
 		printf("\t--correct-umi\tIf correct UMI counts by merging similar UMI sequences as one.\n");
+		printf("\t--umi-correct-method\tUMI correction method to use. Applies only when --correct-umi is enabled. Available options: \'cluster\', \'adjacency\', \'directional\'. [default: directional]\n");
 		printf("\t--barcode-pos #\tstart position of barcode in read 2, 0-based coordinate. [default: automatically determined for antibody; 0 for crispr]\n");
 		printf("\t--scaffold-sequence sequence\tscaffold sequence used to locate the protospacer for sgRNA. This option is only used for crispr data. If --barcode-pos is not set and this option is set, try to locate barcode in front of the specified scaffold sequence.\n");
 		printf("Outputs:\n\toutput_name.csv\tfeature-cell count matrix. First row: [Antibody/CRISPR],barcode_1,...,barcode_n;Other rows: feature_name,feature_count_1,...,feature_count_n.\n");
@@ -541,6 +542,7 @@ int main(int argc, char* argv[]) {
 	max_mismatch_feature = 2;
 	umi_len = -1;
 	correct_umi = false;
+	umi_correct_method = "cluster";
 	barcode_pos = -1;
 	totalseq_type = "";
 	scaffold_sequence = "";
@@ -566,6 +568,9 @@ int main(int argc, char* argv[]) {
 		}
 		if (!strcmp(argv[i], "--correct-umi")) {
 			correct_umi = true;
+		}
+		if (!strcmp(argv[i], "--umi-correct-method")) {
+			umi_correct_method = argv[i + 1];
 		}
 		if (!strcmp(argv[i], "--barcode-pos")) {
 			barcode_pos = atoi(argv[i + 1]);
@@ -646,10 +651,10 @@ int main(int argc, char* argv[]) {
 	printf("Outputs are written. Time spent = %.2fs.\n", difftime(end_, interim_));
 
 	if (correct_umi) {
-		printf("UMI correction is enabled.\n");
+		printf("UMI correction is enabled. Use %s method for correction.\n", umi_correct_method.c_str());
 		interim_ = time(NULL);
 		for (int i = 0; i < n_cat; ++i)
-			dataCollectors[i].correct_umi(umi_len, cell_names, feature_names);
+			dataCollectors[i].correct_umi(umi_len, cell_names, feature_names, umi_correct_method);
 		end_ = time(NULL);
 		printf("UMI correction is finished. Time spent = %.2fs.\n", difftime(end_, interim_));
 		interim_ = end_;
