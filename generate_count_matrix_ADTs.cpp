@@ -542,7 +542,7 @@ int main(int argc, char* argv[]) {
 	max_mismatch_feature = 2;
 	umi_len = -1;
 	correct_umi = false;
-	umi_correct_method = "cluster";
+	umi_correct_method = "directional";
 	barcode_pos = -1;
 	totalseq_type = "";
 	scaffold_sequence = "";
