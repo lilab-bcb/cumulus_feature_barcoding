@@ -18,21 +18,23 @@ class DisjointSet {
         std::vector<int> count;
         std::vector<int> parent;
         std::vector<int> rank;
-        std::vector<int> max_count;
+        std::vector<int> tree_max;
+        std::vector<int> argsorted;
         std::vector<int> order;
 
         std::vector<int> path;
     public:
         DisjointSet() {}
 
-        void init(UMI2Count& umi2count, bool do_sort) {
+        void init(UMI2Count& umi2count) {
             int n = umi2count.size();
 
             bid = std::vector<uint64_t>(n, 0);
             count = std::vector<int>(n, 0);
-            parent = std::vector<int>(n, -1);
+            parent = std::vector<int>(n);
             rank = std::vector<int>(n, 0);
-            max_count = std::vector<int>(n, 0);
+            tree_max = std::vector<int>(n);
+            argsorted = std::vector<int>(n);
             order = std::vector<int>(n);
 
             int i = 0;
@@ -40,35 +42,45 @@ class DisjointSet {
                 bid[i] = kv.first;
                 count[i] = kv.second;
                 parent[i] = i;
-                max_count[i] = i;
-                order[i] = i;
+                tree_max[i] = i;
+                argsorted[i] = i;
                 ++i;
             }
 
-            if (do_sort)
-                std::sort(order.begin(), order.end(),
-                    [this](size_t i1, size_t i2) {
-                        if (count[i1] != count[i2])
-                            return count[i1] > count[i2];
-                        else
-                            return bid[i1] < bid[i2];
-                });
+            std::sort(argsorted.begin(), argsorted.end(),
+                [this](size_t i1, size_t i2) {
+                    if (count[i1] != count[i2])
+                        return count[i1] > count[i2];
+                    else
+                        return bid[i1] < bid[i2];
+            });
+
+            for (int i = 0; i < argsorted.size(); ++i)
+                order[argsorted[i]] = i;
         }
 
         std::vector<uint64_t>& get_bid() {
             return bid;
         }
 
-        std::vector<int>& get_order() {
-            return order;
-        }
-
         std::vector<int>& get_count() {
             return count;
         }
 
-        std::vector<int>& get_max_count() {
-            return max_count;
+        std::vector<int>& get_parent() {
+            return parent;
+        }
+
+        std::vector<int>& get_tree_max() {
+            return tree_max;
+        }
+
+        std::vector<int>& get_argsorted() {
+            return argsorted;
+        }
+
+        std::vector<int>& get_order() {
+            return order;
         }
 
         int find_set(int i) { // with path compression optimization
@@ -89,28 +101,32 @@ class DisjointSet {
             if (a != b) {
                 if (rank[a] <= rank[b]) {
                     parent[a] = b;
-                    if ((count[max_count[a]] > count[max_count[b]]) || (count[max_count[a]] == count[max_count[b]] && bid[max_count[a]] < bid[max_count[b]]))
-                        max_count[b] = max_count[a];
+                    if (order[tree_max[a]] < order[tree_max[b]])
+                        tree_max[b] = tree_max[a];
                 } else if (rank[a] > rank[b]) {
                     parent[b] = a;
-                    if ((count[max_count[a]] < count[max_count[b]]) || (count[max_count[a]] == count[max_count[b]] && bid[max_count[a]] > bid[max_count[b]]))
-                        max_count[a] = max_count[b];
+                    if (order[tree_max[a]] > order[tree_max[b]])
+                        tree_max[a] = tree_max[b];
                 }
                 if (rank[a] == rank[b])
                     ++rank[b];
             }
         }
 
-        int find_count_union_max_count(int a) {
-            return count[max_count[find_set(a)]];
-        }
-
-        uint64_t find_bid_union_max_count(int a) {
-            return bid[max_count[find_set(a)]];
+        int find_union_max(int a) {
+            return tree_max[find_set(a)];
         }
 
         bool connected(int a, int b) {
             return find_set(a) == find_set(b);
+        }
+
+        void set_parent(int a, int p) {
+            parent[a] = p;
+        }
+
+        void set_tree_max(int a, int idx_max) {
+            tree_max[a] = idx_max;
         }
 
         UMI2Count get_roots() {
@@ -119,11 +135,11 @@ class DisjointSet {
 
             for (int i = 0; i < bid.size(); ++i) {
                 int root = find_set(i);
-                it = res.find(bid[max_count[root]]);
+                it = res.find(bid[tree_max[root]]);
                 if (it != res.end())
                     it->second += count[i];
                 else
-                    res.insert(std::make_pair(bid[max_count[root]], count[i]));
+                    res.insert(std::make_pair(bid[tree_max[root]], count[i]));
             }
             return res;
         }
@@ -133,7 +149,8 @@ class DisjointSet {
             count.clear();
             parent.clear();
             rank.clear();
-            max_count.clear();
+            tree_max.clear();
+            argsorted.clear();
             order.clear();
         }
 };
@@ -145,9 +162,12 @@ class UMICorrectSet {
         int umi_length;
 
         void correct_by_cluster() {
-            for (const int& i: this->ds.get_order())
+            std::vector<int>& argsorted = this->ds.get_argsorted();
+            std::vector<uint64_t>& bids = this->ds.get_bid();
+
+            for (const int& i: argsorted)
                 for (int j = 0; j < this->umi_length; ++j) {
-                    uint64_t bid_sub = this->ds.get_bid()[i] & (~aux_arr[j][NNUC]);
+                    uint64_t bid_sub = bids[i] & (~aux_arr[j][NNUC]);
                     UMITableIter it = match_tables[j].find(bid_sub);
                     if (it == match_tables[j].end())
                         match_tables[j].insert(std::make_pair(bid_sub, std::vector<int>(1, i)));
@@ -159,162 +179,133 @@ class UMICorrectSet {
         }
 
         void correct_by_adjacency() {
-            bool has_match;
-            int root;
-            for (const int& i: this->ds.get_order()) {
-                has_match = false;
-                root = -1;
+            std::vector<int>& argsorted = this->ds.get_argsorted();
+            std::vector<uint64_t>& bids = this->ds.get_bid();
+            std::vector<int>& order = this->ds.get_order();
+            std::vector<int>& parent = this->ds.get_parent();
+
+            std::vector<int> edge(bids.size(), -1);
+            for (const int& i: argsorted) {
                 for (int j = 0; j < this->umi_length; ++j) {
-                    uint64_t bid_sub = this->ds.get_bid()[i] & (~aux_arr[j][NNUC]);
+                    uint64_t bid_sub = bids[i] & (~aux_arr[j][NNUC]);
                     UMITableIter it = match_tables[j].find(bid_sub);
-                    if (it != match_tables[j].end()) {
-                        if (has_match) {
-                            // Current UMI connects to multiple roots. Set itself as root.
-                            has_match = false;
-                            break;
-                        }
-                        has_match = true;
-                        root = it->second[0];
+                    if (it == match_tables[j].end())
+                        match_tables[j].insert(std::make_pair(bid_sub, std::vector<int>(1, i)));
+                    else {
+                        this->ds.union_sets(it->second[0], i);
+                        if (edge[i] == -1 || order[edge[i]] > order[it->second[0]])
+                            edge[i] = it->second[0];
+                        it->second.push_back(i);
                     }
                 }
+            }
 
-                if (has_match)
-                    this->ds.union_sets(i, root);
-                else
-                    for (int j = 0; j < this->umi_length; ++j) {
-                        uint64_t bid_sub = this->ds.get_bid()[i] & (~aux_arr[j][NNUC]);
-                        match_tables[j].insert(std::make_pair(bid_sub, std::vector<int>(1, i)));
-                    }
+            //for (int i = 0; i < edge.size(); ++i) {
+            //    printf("Node %d: %s, edge = %d, root = %d\n",
+            //        i, binary_to_barcode(bids[i], this->umi_length).c_str(), edge[i], this->ds.find_set(i)
+            //    );
+            //}
+
+            std::vector<int> thresh(bids.size(), -1);
+            for (const int& i: argsorted) {
+                int root = this->ds.find_set(i);
+                if (edge[i] == -1) continue;
+                if (thresh[root] == -1 || thresh[root] < order[edge[i]])
+                    thresh[root] = order[edge[i]];
+            }
+
+            //for (int i = 0; i < thresh.size(); ++i) {
+            //    printf("Node %d: (%s, %d), thresh = %d, parent = %d\n",
+            //        i, binary_to_barcode(bids[i], this->umi_length).c_str(), this->ds.get_count()[i], thresh[i], this->ds.get_parent()[i]
+            //    );
+            //}
+
+            for (const int& i: argsorted) {
+                if (thresh[parent[i]] == -1 || order[i] <= thresh[parent[i]]) {
+                    //printf("Root node (%s, %d)\n",
+                    //    binary_to_barcode(bids[i], this->umi_length).c_str(), counts[i]
+                    //);
+                    this->ds.set_parent(i, i);
+                    this->ds.set_tree_max(i, i);
+                } else
+                    this->ds.set_parent(i, edge[i]);
             }
         }
 
         void correct_by_directional() {
-            bool has_match;
-            int parent;
+            std::vector<uint64_t>& bids = this->ds.get_bid();
+            std::vector<int>& counts = this->ds.get_count();
+            std::vector<int>& argsorted = this->ds.get_argsorted();
+            std::vector<int>& order = this->ds.get_order();
 
-            int pos_one = -1;
-            for (int i = 0; i < this->ds.get_order().size(); ++i)  // TODO: Make it binary search?
-                if (this->ds.get_count()[this->ds.get_order()[i]] == 1) {
-                    pos_one = i;
-                    break;
-                }
+            std::vector<int> edge(bids.size(), -1);
 
-            // Process UMIs with count 1 as cluster method
-            for (auto umi_it = this->ds.get_order().begin() + pos_one; umi_it != this->ds.get_order().end(); ++umi_it) {
+            for (const int& i: argsorted) {
+                //printf("Consider (%s, %d):\n",
+                //    binary_to_barcode(bids[i], this->umi_length).c_str(), counts[i]
+                //);
                 for (int j = 0; j < this->umi_length; ++j) {
-                    uint64_t bid_sub = this->ds.get_bid()[*umi_it] & (~aux_arr[j][NNUC]);
-                    std::pair<UMITableIter, bool> ret;
-                    ret = match_tables[j].insert(std::make_pair(bid_sub, std::vector<int>(1, *umi_it)));
-                    if (!ret.second) {
-                        this->ds.union_sets(ret.first->second[0], *umi_it);
-                    }
-                }
-            }
-
-            std::unordered_map<int, std::vector<int>> groups_one;
-            int root;
-            for (auto umi_it = this->ds.get_order().begin() + pos_one; umi_it != this->ds.get_order().end(); ++umi_it) {
-                root = this->ds.find_set(*umi_it);
-                if (root == *umi_it)
-                    groups_one.insert(std::make_pair(*umi_it, std::vector<int>(1, *umi_it)));
-                else
-                    groups_one[root].push_back(*umi_it);
-            }
-            for (auto& kv: groups_one) {
-                printf("Root %s: ", binary_to_barcode(this->ds.get_bid()[kv.first], this->umi_length).c_str());
-                for (int& i: kv.second) {
-                    printf("%s, ", binary_to_barcode(this->ds.get_bid()[i], this->umi_length).c_str());
-                }
-                printf("\n");
-            }
-            printf("\n");
-
-            if (pos_one == 0) return;
-
-            // Process UMIs with count > 1
-            clear_match_tables();
-            for (const int& i: this->ds.get_order()) {
-                if (this->ds.get_count()[i] == 1) break;
-
-                has_match = false;
-                parent = -1;
-                printf("Consider (%s, %d):\n",
-                    binary_to_barcode(this->ds.get_bid()[i], this->umi_length).c_str(), this->ds.get_count()[i]
-                );
-                for (int j = 0; j < this->umi_length; ++j) {
-                    uint64_t bid_sub = this->ds.get_bid()[i] & (~aux_arr[j][NNUC]);
+                    uint64_t bid_sub = bids[i] & (~aux_arr[j][NNUC]);
                     UMITableIter it = match_tables[j].find(bid_sub);
-                    if (it == match_tables[j].end()) {
+
+                    if (it == match_tables[j].end())
                         match_tables[j].insert(std::make_pair(bid_sub, std::vector<int>(1, i)));
-                        //printf("\tInsert %s into hash table %d\n", binary_to_barcode(bid_sub, this->umi_length).c_str(), j);
-                    } else {
+                    else {
                         for (int& k: it->second) {
-                            if (this->ds.get_count()[k] >= 2 * this->ds.get_count()[i] - 1) {
-                                if (parent == -1
-                                 || (this->ds.find_count_union_max_count(parent) < this->ds.find_count_union_max_count(k))
-                                 || (this->ds.find_count_union_max_count(parent) == this->ds.find_count_union_max_count(k) && this->ds.find_bid_union_max_count(parent) > this->ds.find_bid_union_max_count(k))
-                                ) {
-                                    if (parent == -1)
-                                        printf("\tSet parent to (%s, %d) of max count %d\n",
-                                            binary_to_barcode(this->ds.get_bid()[k], this->umi_length).c_str(), this->ds.get_count()[k], this->ds.find_count_union_max_count(k)
-                                        );
-                                    else
-                                        printf("\tSwitch parent from (%s, %d) of max count %d to (%s, %d) of max count %d\n",
-                                            binary_to_barcode(this->ds.get_bid()[parent], this->umi_length).c_str(), this->ds.get_count()[parent], this->ds.find_count_union_max_count(parent),
-                                            binary_to_barcode(this->ds.get_bid()[k], this->umi_length).c_str(), this->ds.get_count()[k], this->ds.find_count_union_max_count(k)
-                                        );
-                                    has_match = true;
-                                    parent = k;
+                            if (counts[i] == 1 && counts[k] == 1) {
+                                //printf("\tUnion (%s, %d) to (%s, %d)\n",
+                                //    binary_to_barcode(bids[i], this->umi_length).c_str(), counts[i],
+                                //    binary_to_barcode(bids[k], this->umi_length).c_str(), counts[k]
+                                //);
+                                this->ds.union_sets(i, k);
+                            }
+                            if (counts[k] > 1 && counts[k] >= 2 * counts[i] - 1) {
+                                if (edge[i] == -1 || order[this->ds.find_union_max(edge[i])] > order[this->ds.find_union_max(k)]) {
+                                    //printf("\tAdd edge (%s, %d) to (%s, %d)\n",
+                                    //    binary_to_barcode(bids[i], this->umi_length).c_str(), counts[i],
+                                    //    binary_to_barcode(bids[k], this->umi_length).c_str(), counts[k]
+                                    //);
+                                    edge[i] = k;
                                 }
                             }
                         }
-
-                        //printf("\tInsert %s into hash table %d\n", binary_to_barcode(bid_sub, this->umi_length).c_str(), j);
                         it->second.push_back(i);
                     }
                 }
-                if (has_match) {
-                    printf("Union (%s, %d) with (%s, %d)\n",
-                            binary_to_barcode(this->ds.get_bid()[i], this->umi_length).c_str(), this->ds.get_count()[i],
-                            binary_to_barcode(this->ds.get_bid()[parent], this->umi_length).c_str(), this->ds.get_count()[parent]
-                        );
-                    this->ds.union_sets(i, parent);
+
+                if (counts[i] > 1 && edge[i] != -1) {
+                    //printf("\tUnion (%s, %d) to (%s, %d)\n",
+                    //    binary_to_barcode(bids[i], this->umi_length).c_str(), counts[i],
+                    //    binary_to_barcode(bids[edge[i]], this->umi_length).c_str(), counts[edge[i]]
+                    //);
+                    this->ds.union_sets(i, edge[i]);
                 }
             }
 
-            // Merge the two graphs together
-            for (auto& kv: groups_one) {
-                has_match = false;
-                parent = -1;
-                for (const int& i: kv.second) {
-                    for (int j = 0; j < this->umi_length; ++j) {
-                        uint64_t bid_sub = this->ds.get_bid()[i] & (~aux_arr[j][NNUC]);
-                        UMITableIter it = match_tables[j].find(bid_sub);
-                        if (it != match_tables[j].end())
-                            for (int&k: it->second) {
-                                if (this->ds.get_count()[k] >= 2 * this->ds.get_count()[i] - 1) {
-                                    if (parent == -1
-                                        || (this->ds.find_count_union_max_count(parent) < this->ds.find_count_union_max_count(k))
-                                        || (this->ds.find_count_union_max_count(parent) == this->ds.find_count_union_max_count(k) && this->ds.find_bid_union_max_count(parent) > this->ds.find_bid_union_max_count(k))
-                                       ) {
-                                           if (parent == -1)
-                                               printf("\tSet parent to (%s, %d) of max count %d\n",
-                                                   binary_to_barcode(this->ds.get_bid()[k], this->umi_length).c_str(), this->ds.get_count()[k], this->ds.find_count_union_max_count(k)
-                                               );
-                                           else
-                                               printf("\tSwitch parent from (%s, %d) of max count %d to (%s, %d) of max count %d\n",
-                                                   binary_to_barcode(this->ds.get_bid()[parent], this->umi_length).c_str(), this->ds.get_count()[parent], this->ds.find_count_union_max_count(parent),
-                                                   binary_to_barcode(this->ds.get_bid()[k], this->umi_length).c_str(), this->ds.get_count()[k], this->ds.find_count_union_max_count(k)
-                                               );
-                                           has_match = true;
-                                           parent = k;
-                                       }
-                                }
-                            }
-                    }
+            for (auto umi_it = argsorted.rbegin(); umi_it != argsorted.rend(); ++umi_it) {
+                if (counts[*umi_it] != 1) break;
+                if (edge[*umi_it] == -1) continue;
+
+                int root = this->ds.find_union_max(*umi_it);
+                //printf("\t%s has root %s\n",
+                //    binary_to_barcode(bids[*umi_it], this->umi_length).c_str(),
+                //    binary_to_barcode(bids[root], this->umi_length).c_str()
+                //);
+
+
+                if (root == *umi_it) {
+                    //printf("\tUnion (%s, %d) to (%s, %d)\n",
+                    //    binary_to_barcode(bids[*umi_it], this->umi_length).c_str(), counts[*umi_it],
+                    //    binary_to_barcode(bids[edge[*umi_it]], this->umi_length).c_str(), counts[edge[*umi_it]]
+                    //);
+                    this->ds.union_sets(*umi_it, edge[*umi_it]);
+                } else if (edge[root] == -1 || order[this->ds.find_union_max(edge[root])] > order[this->ds.find_union_max(edge[*umi_it])]) {
+                    //printf("\tAdd edge (%s, %d) to (%s, %d)\n",
+                    //    binary_to_barcode(bids[root], this->umi_length).c_str(), counts[root],
+                    //    binary_to_barcode(bids[edge[*umi_it]], this->umi_length).c_str(), counts[edge[*umi_it]]
+                    //);
+                    edge[root] = edge[*umi_it];
                 }
-                if (has_match)
-                    this->ds.union_sets(kv.first, parent);
             }
         }
 
@@ -335,16 +326,10 @@ class UMICorrectSet {
         }
 
         void build_set(UMI2Count& umi2count, std::string& method) {
-            if (method == "cluster") {
-                this->ds.init(umi2count, false);
-                correct_by_cluster();
-            } else if (method == "adjacency") {
-                this->ds.init(umi2count, true);
-                correct_by_adjacency();
-            } else {
-                this->ds.init(umi2count, true);
-                correct_by_directional();
-            }
+            this->ds.init(umi2count);
+            if (method == "cluster") correct_by_cluster();
+            else if (method == "adjacency") correct_by_adjacency();
+            else correct_by_directional();
         }
 
         UMI2Count get_corrected_umi_counts() {
