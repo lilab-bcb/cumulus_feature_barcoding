@@ -241,9 +241,6 @@ class UMICorrectSet {
             std::vector<int> edge(bids.size(), -1);
 
             for (const int& i: argsorted) {
-                //printf("Consider (%s, %d):\n",
-                //    binary_to_barcode(bids[i], this->umi_length).c_str(), counts[i]
-                //);
                 for (int j = 0; j < this->umi_length; ++j) {
                     uint64_t bid_sub = bids[i] & (~aux_arr[j][NNUC]);
                     UMITableIter it = match_tables[j].find(bid_sub);
@@ -252,34 +249,18 @@ class UMICorrectSet {
                         match_tables[j].insert(std::make_pair(bid_sub, std::vector<int>(1, i)));
                     else {
                         for (int& k: it->second) {
-                            if (counts[i] == 1 && counts[k] == 1) {
-                                //printf("\tUnion (%s, %d) to (%s, %d)\n",
-                                //    binary_to_barcode(bids[i], this->umi_length).c_str(), counts[i],
-                                //    binary_to_barcode(bids[k], this->umi_length).c_str(), counts[k]
-                                //);
+                            if (counts[i] == 1 && counts[k] == 1)
                                 this->ds.union_sets(i, k);
-                            }
+
                             if (counts[k] > 1 && counts[k] >= 2 * counts[i] - 1) {
-                                if (edge[i] == -1 || order[this->ds.find_union_max(edge[i])] > order[this->ds.find_union_max(k)]) {
-                                    //printf("\tAdd edge (%s, %d) to (%s, %d)\n",
-                                    //    binary_to_barcode(bids[i], this->umi_length).c_str(), counts[i],
-                                    //    binary_to_barcode(bids[k], this->umi_length).c_str(), counts[k]
-                                    //);
+                                if (edge[i] == -1 || order[this->ds.find_union_max(edge[i])] > order[this->ds.find_union_max(k)])
                                     edge[i] = k;
-                                }
                             }
                         }
                         it->second.push_back(i);
                     }
                 }
-
-                if (counts[i] > 1 && edge[i] != -1) {
-                    //printf("\tUnion (%s, %d) to (%s, %d)\n",
-                    //    binary_to_barcode(bids[i], this->umi_length).c_str(), counts[i],
-                    //    binary_to_barcode(bids[edge[i]], this->umi_length).c_str(), counts[edge[i]]
-                    //);
-                    this->ds.union_sets(i, edge[i]);
-                }
+                if (counts[i] > 1 && edge[i] != -1) this->ds.union_sets(i, edge[i]);
             }
 
             for (auto umi_it = argsorted.rbegin(); umi_it != argsorted.rend(); ++umi_it) {
@@ -287,25 +268,10 @@ class UMICorrectSet {
                 if (edge[*umi_it] == -1) continue;
 
                 int root = this->ds.find_union_max(*umi_it);
-                //printf("\t%s has root %s\n",
-                //    binary_to_barcode(bids[*umi_it], this->umi_length).c_str(),
-                //    binary_to_barcode(bids[root], this->umi_length).c_str()
-                //);
-
-
-                if (root == *umi_it) {
-                    //printf("\tUnion (%s, %d) to (%s, %d)\n",
-                    //    binary_to_barcode(bids[*umi_it], this->umi_length).c_str(), counts[*umi_it],
-                    //    binary_to_barcode(bids[edge[*umi_it]], this->umi_length).c_str(), counts[edge[*umi_it]]
-                    //);
+                if (root == *umi_it)
                     this->ds.union_sets(*umi_it, edge[*umi_it]);
-                } else if (edge[root] == -1 || order[this->ds.find_union_max(edge[root])] > order[this->ds.find_union_max(edge[*umi_it])]) {
-                    //printf("\tAdd edge (%s, %d) to (%s, %d)\n",
-                    //    binary_to_barcode(bids[root], this->umi_length).c_str(), counts[root],
-                    //    binary_to_barcode(bids[edge[*umi_it]], this->umi_length).c_str(), counts[edge[*umi_it]]
-                    //);
+                else if (edge[root] == -1 || order[this->ds.find_union_max(edge[root])] > order[this->ds.find_union_max(edge[*umi_it])])
                     edge[root] = edge[*umi_it];
-                }
             }
         }
 
