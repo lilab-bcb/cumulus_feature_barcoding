@@ -189,9 +189,10 @@ class UMICorrectSet {
                 for (int j = 0; j < this->umi_length; ++j) {
                     uint64_t bid_sub = bids[i] & (~aux_arr[j][NNUC]);
                     UMITableIter it = match_tables[j].find(bid_sub);
-                    if (it == match_tables[j].end())
+                    if (it == match_tables[j].end()) {
+                        if (edge[i] == -1) edge[i] = i;
                         match_tables[j].insert(std::make_pair(bid_sub, std::vector<int>(1, i)));
-                    else {
+                    } else {
                         this->ds.union_sets(it->second[0], i);
                         if (edge[i] == -1 || order[edge[i]] > order[it->second[0]])
                             edge[i] = it->second[0];
@@ -200,31 +201,14 @@ class UMICorrectSet {
                 }
             }
 
-            //for (int i = 0; i < edge.size(); ++i) {
-            //    printf("Node %d: %s, edge = %d, root = %d\n",
-            //        i, binary_to_barcode(bids[i], this->umi_length).c_str(), edge[i], this->ds.find_set(i)
-            //    );
-            //}
-
             std::vector<int> thresh(bids.size(), -1);
             for (const int& i: argsorted) {
                 int root = this->ds.find_set(i);
-                if (edge[i] == -1) continue;
-                if (thresh[root] == -1 || thresh[root] < order[edge[i]])
-                    thresh[root] = order[edge[i]];
+                if (thresh[root] < order[edge[i]]) thresh[root] = order[edge[i]];
             }
-
-            //for (int i = 0; i < thresh.size(); ++i) {
-            //    printf("Node %d: (%s, %d), thresh = %d, parent = %d\n",
-            //        i, binary_to_barcode(bids[i], this->umi_length).c_str(), this->ds.get_count()[i], thresh[i], this->ds.get_parent()[i]
-            //    );
-            //}
 
             for (const int& i: argsorted) {
                 if (thresh[parent[i]] == -1 || order[i] <= thresh[parent[i]]) {
-                    //printf("Root node (%s, %d)\n",
-                    //    binary_to_barcode(bids[i], this->umi_length).c_str(), counts[i]
-                    //);
                     this->ds.set_parent(i, i);
                     this->ds.set_tree_max(i, i);
                 } else
