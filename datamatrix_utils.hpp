@@ -97,7 +97,7 @@ public:
 		}
 	}
 
-	void correct_umi(int umi_length, const std::vector<std::string>& cell_names, const std::vector<std::string>& feature_names, std::string& method) {
+	void correct_umi(int umi_length, std::string& method) {
 		UMICorrectSet ucs(umi_length);
 		for (auto& p: data_container) {
 			for (auto& kv: p.second) {

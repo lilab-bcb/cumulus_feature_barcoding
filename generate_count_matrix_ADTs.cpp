@@ -654,7 +654,7 @@ int main(int argc, char* argv[]) {
 		printf("UMI correction is enabled. Use %s method for correction.\n", umi_correct_method.c_str());
 		interim_ = time(NULL);
 		for (int i = 0; i < n_cat; ++i)
-			dataCollectors[i].correct_umi(umi_len, cell_names, feature_names, umi_correct_method);
+			dataCollectors[i].correct_umi(umi_len, umi_correct_method);
 		end_ = time(NULL);
 		printf("UMI correction is finished. Time spent = %.2fs.\n", difftime(end_, interim_));
 		interim_ = end_;
