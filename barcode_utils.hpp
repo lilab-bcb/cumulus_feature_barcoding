@@ -40,6 +40,7 @@ const int STEP = 3;
 const int BASE = 7;
 const int UPPER = 21;
 const int NNUC = 5; // ACGTN
+const uint64_t INVALID_UMI = static_cast<uint64_t>(-1);
 
 const char id2base[NNUC] = {'A', 'C', 'G', 'T', 'N'};
 
@@ -80,7 +81,7 @@ static std::vector<std::vector<uint64_t> > init_aux_arr() {
 
 static const std::vector<std::vector<uint64_t> > aux_arr = init_aux_arr();
 
-uint64_t barcode_to_binary(const std::string& barcode) {
+uint64_t barcode_to_binary(const std::string& barcode, bool check_N = false) {
 	uint64_t binary_id = 0;
 	char c;
 	if (barcode.length() > UPPER) {
@@ -89,6 +90,7 @@ uint64_t barcode_to_binary(const std::string& barcode) {
 	}
 	for (auto&& it = barcode.rbegin(); it != barcode.rend(); ++it) {
 		c = *it;
+		if (check_N && c == 'N') return -1;
 		if (base2id[c] < 0) {
 			printf("Barcode %s contains unknown bases %c!\n", barcode.c_str(), c);
 			exit(-1);
