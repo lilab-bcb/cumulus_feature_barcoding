@@ -11,7 +11,6 @@
 #include <unordered_map>
 #include <H5Cpp.h>
 
-#include "gzip_utils.hpp"
 #include "barcode_utils.hpp"
 #include "umi_utils.hpp"
 
@@ -21,7 +20,7 @@ typedef std::unordered_map<int, Feature2UMI> Cell2Feature;
 const hsize_t CHUNK_SIZE = 80000;
 
 // Either data or (data_size + fillvalue) are specified
-void _create_h5_string_dataset(H5::Group& group, const std::string& name, std::vector<std::string>* data, size_t str_len, size_t data_size, std::string fillvalue) {
+void _create_h5_string_dataset(H5::Group& group, const std::string& name, const std::vector<std::string>* data, size_t str_len, size_t data_size, std::string fillvalue) {
 	H5::DSetCreatPropList prop_list;
 	hsize_t dims_attr[1];
 
@@ -52,7 +51,7 @@ void _create_h5_string_dataset(H5::Group& group, const std::string& name, std::v
 	}
 }
 
-void _create_h5_int_dataset(H5::Group& group, const std::string& name, std::vector<int>& data) {
+void _create_h5_uint_dataset(H5::Group& group, const std::string& name, const std::vector<int>& data) {
 	H5::DSetCreatPropList prop_list;
 	hsize_t dims_data[] = {data.size()};
 	H5::DataSpace dataspace_data(1, dims_data);
@@ -66,6 +65,103 @@ void _create_h5_int_dataset(H5::Group& group, const std::string& name, std::vect
 	dataset_data.write(data.data(), H5::PredType::NATIVE_UINT);
 }
 
+void write_molecule_info_h5(
+	const std::string& output_name,
+	const std::vector<int>& barcode_idx,
+	const std::vector<std::string>& barcodes,
+	const std::vector<int>& feature_idx,
+	const std::vector<std::string>& features,
+	int feature_str_len,
+	const std::vector<std::string>& umi_names,
+	std::vector<int>& umi_counts,
+	int umi_len
+) {
+	const H5std_string filename(output_name + ".molecule_info.h5");
+
+	try {
+		H5::H5File fout(filename, H5F_ACC_TRUNC);
+
+		H5::Group grp = fout.openGroup("/");
+
+		// barcodes
+		_create_h5_uint_dataset(grp, "barcode_idx", barcode_idx);
+		_create_h5_string_dataset(grp, "barcodes", &barcodes, barcodes[0].length(), 0, "");
+
+		// features
+		_create_h5_uint_dataset(grp, "feature_idx", feature_idx);
+		_create_h5_string_dataset(grp, "features", &features, feature_str_len, 0, "");
+
+		// umis
+		_create_h5_string_dataset(grp, "umi", &umi_names, umi_len, 0, "");
+		_create_h5_uint_dataset(grp, "count", umi_counts);
+
+	} catch (H5::Exception& error) {
+		error.printErrorStack();
+		exit(-1);
+	}
+
+	printf("%s is written.\n", filename.c_str());
+}
+
+void write_count_matrix_h5(
+	const std::string& output_name,
+	const std::vector<int>& csr_data,
+	const std::vector<int>& csr_indices,
+	const std::vector<int>& csr_indptr,
+	int total_cells,
+	int total_features,
+	const std::vector<std::string>& barcodes,
+	const std::vector<std::string>& features,
+	int feature_str_len,
+	const std::string& feature_type,
+	const std::string& genome
+) {
+	const H5std_string filename(output_name + ".h5");
+
+	try {
+		H5::H5File fout(filename, H5F_ACC_TRUNC);
+
+		H5::Group grp = fout.createGroup("/matrix");
+
+		// shape
+		hsize_t dims_shape[] = {2};
+		H5::DataSpace dataspace_shape(1, dims_shape);
+		H5::DataSet dataset_shape = grp.createDataSet("shape", H5::PredType::STD_I32LE, dataspace_shape);
+		int shape[2] = {total_features, total_cells};
+		dataset_shape.write(shape, H5::PredType::NATIVE_INT);
+
+		// barcodes
+		_create_h5_string_dataset(grp, "barcodes", &barcodes, barcodes[0].length(), 0, "");
+
+		// count matrix
+		_create_h5_uint_dataset(grp, "data", csr_data);
+		_create_h5_uint_dataset(grp, "indices", csr_indices);
+		_create_h5_uint_dataset(grp, "indptr", csr_indptr);
+
+		// Features
+		H5::Group feature_grp = grp.createGroup("features");
+
+		// name
+		_create_h5_string_dataset(feature_grp, "name", &features, feature_str_len, 0, "");
+		// id
+		_create_h5_string_dataset(feature_grp, "id", &features, feature_str_len, 0, "");
+
+		// feature_type
+		std::string ftype = feature_type == "antibody" ? "Antibody Capture" : "CRISPR Guide Capture";
+		_create_h5_string_dataset(feature_grp, "feature_type", nullptr, ftype.length(), features.size(), ftype);
+
+		// genome
+		_create_h5_string_dataset(feature_grp, "genome", nullptr, ftype.length(), features.size(), genome);
+		_create_h5_string_dataset(feature_grp, "_all_tag_keys", nullptr, 6, 1, "genome");
+
+	} catch (H5::Exception& error) {
+		error.printErrorStack();
+		exit(-1);
+	}
+
+	printf("%s is written.\n", filename.c_str());
+}
+
 class DataCollector {
 public:
 	DataCollector() { clear(); }
@@ -76,11 +172,25 @@ public:
 		++data_container[cell_id][feature_id][umi];
 	}
 
-	void output(const std::string& output_name, const std::string& genome, const std::string& feature_type, int feature_start, int feature_end, const std::vector<std::string>& cell_names, int umi_len, const std::vector<std::string>& feature_names, std::ofstream& freport, int n_threads, bool verbose_report = true, bool is_raw = true) {
+	void output(
+		const std::string& output_name,
+		const std::string& genome,
+		const std::string& feature_type,
+		int feature_start,
+		int feature_end,
+		const std::vector<std::string>& cell_names,
+		int umi_len,
+		const std::vector<std::string>& feature_names,
+		std::ofstream& freport,
+		int n_threads,
+		bool verbose_report = true,
+		bool is_raw = true
+	) {
 		std::vector<int> cell_ids;
 		std::ofstream fout;
 
 		int total_cells = 0, total_reads = 0, total_umis = 0;
+		int total_features = feature_end - feature_start;
 
 		cell_ids.clear();
 		for (auto&& kv : data_container)
@@ -89,18 +199,21 @@ public:
 		if (total_cells > 1) std::sort(cell_ids.begin(), cell_ids.end());
 
 		std::vector<int> dummy(total_cells, 0), tot_umis(total_cells, 0);
-		std::vector<std::vector<int> > ADTs(feature_end - feature_start, dummy);
+		std::vector<std::vector<int> > ADTs(total_features, dummy);
 
-		oGZipFile gout(output_name + ".stat.csv.gz", n_threads);
-		gout.write("Barcode,Feature,UMI,Count\n");
+		// Collect molecule info and stats
+		std::vector<int> barcode_idx;
+		std::vector<int> feature_idx;
+		std::vector<std::string> umi_names;
+		std::vector<int> umi_counts;
 		for (int i = 0; i < total_cells; ++i) {
 			auto& one_cell = data_container[cell_ids[i]];
 			for (auto&& kv1 : one_cell) {
 				for (auto&& kv2 : kv1.second) {
-					gout.write(cell_names[cell_ids[i]]); gout.write(',');
-					gout.write(feature_names[kv1.first]); gout.write(',');
-					gout.write(binary_to_barcode(kv2.first, umi_len)); gout.write(',');
-					gout.write(std::to_string(kv2.second)); gout.write('\n');
+					barcode_idx.push_back(i);
+					feature_idx.push_back(kv1.first - feature_start);
+					umi_names.push_back(binary_to_barcode(kv2.first, umi_len));
+					umi_counts.push_back(kv2.second);
 					total_reads += kv2.second;
 					++total_umis;
 					++ADTs[kv1.first - feature_start][i];
@@ -108,8 +221,6 @@ public:
 				}
 			}
 		}
-		gout.close();
-		printf("%s.stat.csv.gz is written.\n", output_name.c_str());
 
 		// Create a CSR sparse matrix.
 		std::vector<int> csr_data;
@@ -140,50 +251,8 @@ public:
 				max_feature_name_len = feature_names[i].length();
 		}
 
-		// Write to file in HDF5 format.
-		const H5std_string filename(output_name + ".h5");
-
-		try {
-			H5::H5File fout(filename, H5F_ACC_TRUNC);
-
-			H5::Group grp = fout.createGroup("/matrix");
-
-			// shape
-			hsize_t dims_shape[] = {2};
-			H5::DataSpace dataspace_shape(1, dims_shape);
-			H5::DataSet dataset_shape = grp.createDataSet("shape", H5::PredType::STD_I32LE, dataspace_shape);
-			int shape[2] = {feature_end - feature_start, total_cells};
-			dataset_shape.write(shape, H5::PredType::NATIVE_INT);
-
-			// barcodes
-			_create_h5_string_dataset(grp, "barcodes", &barcodes, barcodes[0].length(), 0, "");
-
-			// count matrix
-			_create_h5_int_dataset(grp, "data", csr_data);
-			_create_h5_int_dataset(grp, "indices", csr_indices);
-			_create_h5_int_dataset(grp, "indptr", csr_indptr);
-
-			// Features
-			H5::Group feature_grp = grp.createGroup("features");
-
-			// name
-			_create_h5_string_dataset(feature_grp, "name", &features, max_feature_name_len, 0, "");
-			// id
-			_create_h5_string_dataset(feature_grp, "id", &features, max_feature_name_len, 0, "");
-
-			// feature_type
-			std::string ftype = feature_type == "antibody" ? "Antibody Capture" : "CRISPR Guide Capture";
-			_create_h5_string_dataset(feature_grp, "feature_type", nullptr, ftype.length(), features.size(), ftype);
-
-			// genome
-			_create_h5_string_dataset(feature_grp, "genome", nullptr, ftype.length(), features.size(), genome);
-			_create_h5_string_dataset(feature_grp, "_all_tag_keys", nullptr, 6, 1, "genome");
-
-		} catch (H5::Exception& error) {
-			error.printErrorStack();
-			exit(-1);
-		}
-		printf("%s is written.\n", filename.c_str());
+		write_molecule_info_h5(output_name, barcode_idx, barcodes, feature_idx, features, max_feature_name_len, umi_names, umi_counts, umi_len);
+		write_count_matrix_h5(output_name, csr_data, csr_indices, csr_indptr, total_cells, total_features, barcodes, features, max_feature_name_len, feature_type, genome);
 
 		if (is_raw) {
 			report_buffer << std::endl<< "Section "<< output_name<< std::endl;
