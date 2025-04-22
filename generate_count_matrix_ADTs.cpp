@@ -480,7 +480,7 @@ void process_reads(ReadParser *parser, int thread_id) {
 				}
 				umi = safe_substr(read1.seq, cell_blen, umi_len);
 				binary_umi = barcode_to_binary(umi, true);
-				//if (binary_umi == INVALID_UMI) continue;
+				if (binary_umi == INVALID_UMI) continue;
 				++n_reads_valid_umi_;
 
 				cell_id = cell_iter->second.vid;
