@@ -58,7 +58,7 @@ atomic<int> cnt, n_valid, n_valid_cell, n_valid_feature, n_reads_valid_umi, prev
 
 int n_threads, max_mismatch_cell, max_mismatch_feature, umi_len;
 bool correct_umi;
-string genome, feature_type, totalseq_type, scaffold_sequence, umi_correct_method;
+string feature_type, totalseq_type, scaffold_sequence, umi_correct_method;
 int barcode_pos; // Antibody: Total-Seq A 0; Total-Seq B or C 10. Crispr: default 0, can be set by option
 
 time_t start_, interim_, end_;
@@ -520,7 +520,6 @@ int main(int argc, char* argv[]) {
 		printf("\toutput_name\toutput file name prefix.\n");
 		printf("Options:\n");
 		printf("\t-p #\tnumber of threads. This number should be >= 2. [default: 2]\n");
-		printf("\t--genome genome_name\tGenome reference name. [default: Unknown]\n");
 		printf("\t--chemistry chemistry_type\tchemistry type. [default: auto]\n");
 		printf("\t--max-mismatch-cell #\tmaximum number of mismatches allowed for cell barcodes. [default: auto-decided by chemistry]\n");
 		printf("\t--feature feature_type\tfeature type can be either antibody or crispr. [default: antibody]\n");
@@ -541,7 +540,6 @@ int main(int argc, char* argv[]) {
 
 	n_threads = 2;
 	chemistry = "auto";
-	genome = "Unknown";
 	max_mismatch_cell = -1;
 	feature_type = "antibody";
 	max_mismatch_feature = 2;
@@ -558,9 +556,6 @@ int main(int argc, char* argv[]) {
 		}
 		if (!strcmp(argv[i], "--chemistry")) {
 			chemistry = argv[i + 1];
-		}
-		if (!strcmp(argv[i], "--genome")) {
-			genome = argv[i + 1];
 		}
 		if (!strcmp(argv[i], "--max-mismatch-cell")) {
 			max_mismatch_cell = atoi(argv[i + 1]);
@@ -650,11 +645,11 @@ int main(int argc, char* argv[]) {
 	fout<< "Number of reads with valid cell, feature and UMI barcodes: "<< n_reads_valid_umi<< " ("<< fixed<< setprecision(2)<< n_reads_valid_umi * 100.0 / cnt << "%)" << endl;
 
 	if (!detected_ftype)
-		dataCollectors[0].output(output_name, genome, feature_type, 0, n_feature, cell_names, umi_len, feature_names, fout, n_threads, !correct_umi);
+		dataCollectors[0].output(output_name, feature_type, 0, n_feature, cell_names, umi_len, feature_names, fout, n_threads, !correct_umi);
 	else
 		for (int i = 0; i < n_cat; ++i) {
 			printf("Feature '%s':\n", cat_names[i].c_str());
-			dataCollectors[i].output(output_name + "." + cat_names[i], genome, feature_type, cat_nfs[i], cat_nfs[i + 1], cell_names, umi_len, feature_names, fout, n_threads, !correct_umi);
+			dataCollectors[i].output(output_name + "." + cat_names[i], feature_type, cat_nfs[i], cat_nfs[i + 1], cell_names, umi_len, feature_names, fout, n_threads, !correct_umi);
 		}
 
 	end_ = time(NULL);
@@ -670,10 +665,10 @@ int main(int argc, char* argv[]) {
 		interim_ = end_;
 
 		if (!detected_ftype)
-			dataCollectors[0].output(output_name + ".correct", genome, feature_type, 0, n_feature, cell_names, umi_len, feature_names, fout, n_threads, true, false);
+			dataCollectors[0].output(output_name + ".correct", feature_type, 0, n_feature, cell_names, umi_len, feature_names, fout, n_threads, true, false);
 		else
 			for (int i = 0; i < n_cat; ++i)
-				dataCollectors[i].output(output_name + "." + cat_names[i] + ".correct", genome, feature_type, cat_nfs[i], cat_nfs[i + 1], cell_names, umi_len, feature_names, fout, n_threads, true, false);
+				dataCollectors[i].output(output_name + "." + cat_names[i] + ".correct", feature_type, cat_nfs[i], cat_nfs[i + 1], cell_names, umi_len, feature_names, fout, n_threads, true, false);
 		fout.close();
 		end_ = time(NULL);
 		printf("UMI-corrected outputs are written. Time spent = %.2fs\n", difftime(end_, interim_));

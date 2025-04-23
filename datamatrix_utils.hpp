@@ -113,8 +113,7 @@ void write_count_matrix_h5(
 	const std::vector<std::string>& barcodes,
 	const std::vector<std::string>& features,
 	int feature_str_len,
-	const std::string& feature_type,
-	const std::string& genome
+	const std::string& feature_type
 ) {
 	const H5std_string filename(output_name + ".h5");
 
@@ -151,7 +150,7 @@ void write_count_matrix_h5(
 		_create_h5_string_dataset(feature_grp, "feature_type", nullptr, ftype.length(), features.size(), ftype);
 
 		// genome
-		_create_h5_string_dataset(feature_grp, "genome", nullptr, ftype.length(), features.size(), genome);
+		_create_h5_string_dataset(feature_grp, "genome", nullptr, 1, features.size(), "");
 		_create_h5_string_dataset(feature_grp, "_all_tag_keys", nullptr, 6, 1, "genome");
 
 	} catch (H5::Exception& error) {
@@ -174,7 +173,6 @@ public:
 
 	void output(
 		const std::string& output_name,
-		const std::string& genome,
 		const std::string& feature_type,
 		int feature_start,
 		int feature_end,
@@ -252,7 +250,7 @@ public:
 		}
 
 		write_molecule_info_h5(output_name, barcode_idx, barcodes, feature_idx, features, max_feature_name_len, umi_names, umi_counts, umi_len);
-		write_count_matrix_h5(output_name, csr_data, csr_indices, csr_indptr, total_cells, total_features, barcodes, features, max_feature_name_len, feature_type, genome);
+		write_count_matrix_h5(output_name, csr_data, csr_indices, csr_indptr, total_cells, total_features, barcodes, features, max_feature_name_len, feature_type);
 
 		if (is_raw) {
 			report_buffer << std::endl<< "Section "<< output_name<< std::endl;
