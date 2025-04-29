@@ -11,6 +11,7 @@
 typedef std::unordered_map<uint64_t, int> UMI2Count;
 typedef std::unordered_map<uint64_t, std::vector<int>> UMITable;
 typedef UMITable::iterator UMITableIter;
+typedef std::unordered_map<uint64_t, std::vector<std::pair<int, int>>> UMI2FeatureCount;
 
 class DisjointSet {
     private:

@@ -57,8 +57,9 @@ string chemistry;
 atomic<int> cnt, n_valid, n_valid_cell, n_valid_feature, n_reads_valid_umi, prev_cnt; // cnt: total number of reads; n_valid, reads with valid cell barcode and feature barcode; n_valid_cell, reads with valid cell barcode; n_valid_feature, reads with valid feature barcode; prev_cnt: for printing # of reads processed purpose
 
 int n_threads, max_mismatch_cell, max_mismatch_feature, umi_len;
+float min_ratio_chimeric;
 bool correct_umi;
-string feature_type, totalseq_type, scaffold_sequence, umi_correct_method;
+string genome, feature_type, totalseq_type, scaffold_sequence, umi_correct_method;
 int barcode_pos; // Antibody: Total-Seq A 0; Total-Seq B or C 10. Crispr: default 0, can be set by option
 
 time_t start_, interim_, end_;
@@ -520,13 +521,15 @@ int main(int argc, char* argv[]) {
 		printf("\toutput_name\toutput file name prefix.\n");
 		printf("Options:\n");
 		printf("\t-p #\tnumber of threads. This number should be >= 2. [default: 2]\n");
+		printf("\t--genome genome_name\tgenome reference name. [default: \'\']\n");
 		printf("\t--chemistry chemistry_type\tchemistry type. [default: auto]\n");
 		printf("\t--max-mismatch-cell #\tmaximum number of mismatches allowed for cell barcodes. [default: auto-decided by chemistry]\n");
 		printf("\t--feature feature_type\tfeature type can be either antibody or crispr. [default: antibody]\n");
 		printf("\t--max-mismatch-feature #\tmaximum number of mismatches allowed for feature barcodes. [default: 2]\n");
-		printf("\t--umi-length len\tlength of the UMI sequence. [default: auto-decided by chemistry]\n");
+		printf("\t--umi-length #\tlength of the UMI sequence. [default: auto-decided by chemistry]\n");
 		printf("\t--correct-umi\tIf correct UMI counts by merging similar UMI sequences as one.\n");
-		printf("\t--umi-correct-method\tUMI correction method to use. Applies only when --correct-umi is enabled. Available options: \'cluster\', \'adjacency\', \'directional\'. [default: directional]\n");
+		printf("\t--umi-correct-method method_name\tUMI correction method to use. Applies only when --correct-umi is enabled. Available options: \'cluster\', \'adjacency\', \'directional\'. [default: directional]\n");
+		printf("\t--min-read-ratio #\tMinimum read count ratio (non-inclusive) to filter chimeric reads.  [default: 0.5]\n");
 		printf("\t--barcode-pos #\tstart position of barcode in read 2, 0-based coordinate. [default: automatically determined for antibody; 0 for crispr]\n");
 		printf("\t--scaffold-sequence sequence\tscaffold sequence used to locate the protospacer for sgRNA. This option is only used for crispr data. If --barcode-pos is not set and this option is set, try to locate barcode in front of the specified scaffold sequence.\n");
 		printf("Outputs:\n\toutput_name.csv\tfeature-cell count matrix. First row: [Antibody/CRISPR],barcode_1,...,barcode_n;Other rows: feature_name,feature_count_1,...,feature_count_n.\n");
@@ -539,6 +542,7 @@ int main(int argc, char* argv[]) {
 	start_ = time(NULL);
 
 	n_threads = 2;
+	genome = "";
 	chemistry = "auto";
 	max_mismatch_cell = -1;
 	feature_type = "antibody";
@@ -546,28 +550,32 @@ int main(int argc, char* argv[]) {
 	umi_len = -1;
 	correct_umi = false;
 	umi_correct_method = "directional";
+	min_ratio_chimeric = 0.5;
 	barcode_pos = -1;
 	totalseq_type = "";
 	scaffold_sequence = "";
 
 	for (int i = 5; i < argc; ++i) {
 		if (!strcmp(argv[i], "-p")) {
-			n_threads = atoi(argv[i + 1]);
+			n_threads = stoi(argv[i + 1]);
+		}
+		if (!strcmp(argv[i], "--genome")) {
+			genome = argv[i + 1];
 		}
 		if (!strcmp(argv[i], "--chemistry")) {
 			chemistry = argv[i + 1];
 		}
 		if (!strcmp(argv[i], "--max-mismatch-cell")) {
-			max_mismatch_cell = atoi(argv[i + 1]);
+			max_mismatch_cell = stoi(argv[i + 1]);
 		}
 		if (!strcmp(argv[i], "--feature")) {
 			feature_type = argv[i + 1];
 		}
 		if (!strcmp(argv[i], "--max-mismatch-feature")) {
-			max_mismatch_feature = atoi(argv[i + 1]);
+			max_mismatch_feature = stoi(argv[i + 1]);
 		}
 		if (!strcmp(argv[i], "--umi-length")) {
-			umi_len = atoi(argv[i + 1]);
+			umi_len = stoi(argv[i + 1]);
 		}
 		if (!strcmp(argv[i], "--correct-umi")) {
 			correct_umi = true;
@@ -575,8 +583,15 @@ int main(int argc, char* argv[]) {
 		if (!strcmp(argv[i], "--umi-correct-method")) {
 			umi_correct_method = argv[i + 1];
 		}
+		if (!strcmp(argv[i], "--min-read-ratio")) {
+			min_ratio_chimeric = stof(argv[i + 1]);
+			if (min_ratio_chimeric >= 1.0 || min_ratio_chimeric < 0) {
+				printf("--min-read-ratio must be a fractional number in [0, 1)!\n");
+				exit(-1);
+			}
+		}
 		if (!strcmp(argv[i], "--barcode-pos")) {
-			barcode_pos = atoi(argv[i + 1]);
+			barcode_pos = stoi(argv[i + 1]);
 		}
 		if (!strcmp(argv[i], "--scaffold-sequence")) {
 			scaffold_sequence = argv[i + 1];
@@ -645,11 +660,11 @@ int main(int argc, char* argv[]) {
 	fout<< "Number of reads with valid cell, feature and UMI barcodes: "<< n_reads_valid_umi<< " ("<< fixed<< setprecision(2)<< n_reads_valid_umi * 100.0 / cnt << "%)" << endl;
 
 	if (!detected_ftype)
-		dataCollectors[0].output(output_name, feature_type, 0, n_feature, cell_names, umi_len, feature_names, fout, n_threads, !correct_umi);
+		dataCollectors[0].output(output_name, genome, feature_type, 0, n_feature, cell_names, umi_len, feature_names, fout, n_threads, !correct_umi);
 	else
 		for (int i = 0; i < n_cat; ++i) {
 			printf("Feature '%s':\n", cat_names[i].c_str());
-			dataCollectors[i].output(output_name + "." + cat_names[i], feature_type, cat_nfs[i], cat_nfs[i + 1], cell_names, umi_len, feature_names, fout, n_threads, !correct_umi);
+			dataCollectors[i].output(output_name + "." + cat_names[i], genome, feature_type, cat_nfs[i], cat_nfs[i + 1], cell_names, umi_len, feature_names, fout, n_threads, !correct_umi);
 		}
 
 	end_ = time(NULL);
@@ -658,17 +673,31 @@ int main(int argc, char* argv[]) {
 	if (correct_umi) {
 		printf("UMI correction is enabled. Use %s method for correction.\n", umi_correct_method.c_str());
 		interim_ = time(NULL);
-		for (int i = 0; i < n_cat; ++i)
+		for (int i = 0; i < n_cat; ++i) {
+			int total_umis_raw = dataCollectors[i].get_total_umis();
+			int total_cells_raw = dataCollectors[i].get_total_cells();
+
 			dataCollectors[i].correct_umi(umi_len, umi_correct_method);
+			int total_umis1 = dataCollectors[i].get_total_umis();
+			printf("After UMI correction, %d (%.2f%%) UMIs are kept.\n", total_umis1, total_umis1 * 1.0 / total_umis_raw * 100);
+
+			dataCollectors[i].filter_chimeric_reads(min_ratio_chimeric, cell_names, feature_names, 0);
+			int total_umis2 = dataCollectors[i].get_total_umis();
+			int total_cells2 = dataCollectors[i].get_total_cells();
+			printf("After PCR chimeric filtering, %d (%.2f%%) UMIs and %d (%.2f%%) cells are kept.\n",
+				total_umis2, total_umis2 * 1.0 / total_umis_raw * 100,
+				total_cells2, total_cells2 * 1.0 / total_cells_raw * 100
+			);
+		}
 		end_ = time(NULL);
 		printf("UMI correction is finished. Time spent = %.2fs.\n", difftime(end_, interim_));
 		interim_ = end_;
 
 		if (!detected_ftype)
-			dataCollectors[0].output(output_name + ".correct", feature_type, 0, n_feature, cell_names, umi_len, feature_names, fout, n_threads, true, false);
+			dataCollectors[0].output(output_name + ".correct", genome, feature_type, 0, n_feature, cell_names, umi_len, feature_names, fout, n_threads, true, false);
 		else
 			for (int i = 0; i < n_cat; ++i)
-				dataCollectors[i].output(output_name + "." + cat_names[i] + ".correct", feature_type, cat_nfs[i], cat_nfs[i + 1], cell_names, umi_len, feature_names, fout, n_threads, true, false);
+				dataCollectors[i].output(output_name + "." + cat_names[i] + ".correct", genome, feature_type, cat_nfs[i], cat_nfs[i + 1], cell_names, umi_len, feature_names, fout, n_threads, true, false);
 		fout.close();
 		end_ = time(NULL);
 		printf("UMI-corrected outputs are written. Time spent = %.2fs\n", difftime(end_, interim_));
