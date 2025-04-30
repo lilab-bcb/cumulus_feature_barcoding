@@ -10,7 +10,6 @@
 #include <sstream>
 #include <unordered_map>
 #include <H5Cpp.h>
-#include <ctime>
 
 #include "barcode_utils.hpp"
 #include "umi_utils.hpp"
@@ -292,35 +291,32 @@ public:
 
 	void correct_umi(int umi_length, std::string& method) {
 		UMICorrectSet ucs(umi_length);
-		time_t start_time, end_time;
-		double total_time_1, total_time_2;
-		total_time_1 = total_time_2 = 0;
 		for (auto& p: data_container)
 			for (auto& kv: p.second) {
 				if (kv.second.size() == 1)
 					continue;
-				start_time = time(NULL);
 				ucs.clear();
 				ucs.build_set(kv.second, method);
-				end_time = time(NULL);
-				total_time_1 += difftime(end_time, start_time);
-
-				start_time = time(NULL);
 				data_container[p.first][kv.first] = ucs.get_corrected_umi_counts();
-				end_time = time(NULL);
-				total_time_2 += difftime(end_time, start_time);
 			}
-		printf("[Benchmark] Time spent on UMI correction calculation = %.2fs.\n", total_time_1);
-		printf("[Benchmark] Time spent on getting corrected UMIs = %.2fs.\n", total_time_2);
 	}
 
-	void filter_chimeric_reads(float min_ratio, const std::vector<std::string>& cell_names, const std::vector<std::string>& feature_names, int feature_start) {
+	void filter_chimeric_reads(int umi_count_cutoff, float read_ratio_cutoff, const std::vector<std::string>& cell_names, const std::vector<std::string>& feature_names, int feature_start) {
 		UMI2FeatureCount umi_feature_table;
 		UMI2Count umi_total_reads;
 		Cell2Feature new_data;
-		time_t start_time, end_time;
 
-		start_time = time(NULL);
+		// Filter out UMIs of Count <= umi_count_cutoff if needed
+		if (umi_count_cutoff > 0) {
+			for (auto& p: data_container)
+				for (auto& kv1: p.second)
+					for (auto& kv2: kv1.second)
+						if (kv2.second > umi_count_cutoff)
+							new_data[p.first][kv1.first][kv2.first] = kv2.second;
+			this->data_container = new_data;
+		}
+
+		new_data.clear();
 		for (auto& p: data_container) {
 			const int& cur_cell = p.first;
 
@@ -334,46 +330,25 @@ public:
 					const uint64_t& cur_umi = kv2.first;
 					const int& cur_count = kv2.second;
 
-					if (umi_feature_table.find(cur_umi) == umi_feature_table.end()) {
-						umi_total_reads.insert(std::make_pair(cur_umi, cur_count));
-						umi_feature_table.insert(std::make_pair(cur_umi, std::vector<std::pair<int, int>>(1, std::make_pair(cur_feature, cur_count))));
-					} else {
-						umi_total_reads[cur_umi] += cur_count;
-						umi_feature_table[cur_umi].push_back(std::make_pair(cur_feature, cur_count));
-					}
+					umi_total_reads[cur_umi] += cur_count;
+					umi_feature_table[cur_umi].push_back(std::make_pair(cur_feature, cur_count));
 				}
 			}
 
-			// Filter out UMIs of Count <= min_rato * total_reads
+			// Filter out UMIs of Count <= read_ratio_cutoff * total_reads
 			for (auto& kv1: umi_feature_table) {
 				const uint64_t& cur_umi = kv1.first;
-				float thresh = min_ratio * umi_total_reads[cur_umi];
+				float thresh = read_ratio_cutoff * umi_total_reads[cur_umi];
 				for (auto& v: kv1.second) {
 					const int& cur_feature = v.first;
 					const int& cur_count = v.second;
-					if (cur_count > thresh) {
-						if (new_data.find(cur_cell) == new_data.end()) {
-							Feature2UMI feature_counts;
-							UMI2Count umi_counts;
-							umi_counts.insert(std::make_pair(cur_umi, cur_count));
-							feature_counts.insert(std::make_pair(cur_feature, umi_counts));
-							new_data.insert(std::make_pair(cur_cell, feature_counts));
-						} else if (new_data[cur_cell].find(cur_feature) == new_data[cur_cell].end()) {
-							UMI2Count umi_counts;
-							umi_counts.insert(std::make_pair(cur_umi, cur_count));
-							new_data[cur_cell].insert(std::make_pair(cur_feature, umi_counts));
-						} else {
-							new_data[cur_cell][cur_feature].insert(std::make_pair(cur_umi, cur_count));
-						}
-					}
+					if (cur_count > thresh)
+						new_data[cur_cell][cur_feature][cur_umi] = cur_count;
 				}
 			}
 		}
 
 		this->data_container = new_data;
-
-		end_time = time(NULL);
-		printf("[Benchmark] Time spent on PCR chimeric filtering = %.2fs.\n", difftime(end_time, start_time));
 	}
 
 private:

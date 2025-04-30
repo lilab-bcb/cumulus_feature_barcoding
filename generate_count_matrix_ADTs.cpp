@@ -57,7 +57,8 @@ string chemistry;
 atomic<int> cnt, n_valid, n_valid_cell, n_valid_feature, n_reads_valid_umi, prev_cnt; // cnt: total number of reads; n_valid, reads with valid cell barcode and feature barcode; n_valid_cell, reads with valid cell barcode; n_valid_feature, reads with valid feature barcode; prev_cnt: for printing # of reads processed purpose
 
 int n_threads, max_mismatch_cell, max_mismatch_feature, umi_len;
-float min_ratio_chimeric;
+float read_ratio_cutoff;
+int umi_count_cutoff;
 bool correct_umi;
 string genome, feature_type, totalseq_type, scaffold_sequence, umi_correct_method;
 int barcode_pos; // Antibody: Total-Seq A 0; Total-Seq B or C 10. Crispr: default 0, can be set by option
@@ -529,7 +530,8 @@ int main(int argc, char* argv[]) {
 		printf("\t--umi-length #\tlength of the UMI sequence. [default: auto-decided by chemistry]\n");
 		printf("\t--correct-umi\tIf correct UMI counts by merging similar UMI sequences as one.\n");
 		printf("\t--umi-correct-method method_name\tUMI correction method to use. Applies only when --correct-umi is enabled. Available options: \'cluster\', \'adjacency\', \'directional\'. [default: directional]\n");
-		printf("\t--min-read-ratio #\tMinimum read count ratio (non-inclusive) to filter chimeric reads.  [default: 0.5]\n");
+		printf("\t--umi-count-cutoff #\tRead count threshold (non-inclusive) to filter UMIs.  [default: 0]\n");
+		printf("\t--read-ratio-cutoff #\tRead count ratio threshold (non-inclusive) to filter chimeric reads.  [default: 0.5]\n");
 		printf("\t--barcode-pos #\tstart position of barcode in read 2, 0-based coordinate. [default: automatically determined for antibody; 0 for crispr]\n");
 		printf("\t--scaffold-sequence sequence\tscaffold sequence used to locate the protospacer for sgRNA. This option is only used for crispr data. If --barcode-pos is not set and this option is set, try to locate barcode in front of the specified scaffold sequence.\n");
 		printf("Outputs:\n\toutput_name.csv\tfeature-cell count matrix. First row: [Antibody/CRISPR],barcode_1,...,barcode_n;Other rows: feature_name,feature_count_1,...,feature_count_n.\n");
@@ -550,7 +552,8 @@ int main(int argc, char* argv[]) {
 	umi_len = -1;
 	correct_umi = false;
 	umi_correct_method = "directional";
-	min_ratio_chimeric = 0.5;
+	umi_count_cutoff = 0;
+	read_ratio_cutoff = 0.5;
 	barcode_pos = -1;
 	totalseq_type = "";
 	scaffold_sequence = "";
@@ -583,10 +586,13 @@ int main(int argc, char* argv[]) {
 		if (!strcmp(argv[i], "--umi-correct-method")) {
 			umi_correct_method = argv[i + 1];
 		}
-		if (!strcmp(argv[i], "--min-read-ratio")) {
-			min_ratio_chimeric = stof(argv[i + 1]);
-			if (min_ratio_chimeric >= 1.0 || min_ratio_chimeric < 0) {
-				printf("--min-read-ratio must be a fractional number in [0, 1)!\n");
+		if (!strcmp(argv[i], "--umi-count-cutoff")) {
+			umi_count_cutoff = stoi(argv[i + 1]);
+		}
+		if (!strcmp(argv[i], "--read-ratio-cutoff")) {
+			read_ratio_cutoff = stof(argv[i + 1]);
+			if (read_ratio_cutoff >= 1.0 || read_ratio_cutoff < 0) {
+				printf("\'--read-ratio-cutoff\' must be a fractional number within [0, 1)!\n");
 				exit(-1);
 			}
 		}
@@ -681,13 +687,20 @@ int main(int argc, char* argv[]) {
 			int total_umis1 = dataCollectors[i].get_total_umis();
 			printf("After UMI correction, %d (%.2f%%) UMIs are kept.\n", total_umis1, total_umis1 * 1.0 / total_umis_raw * 100);
 
-			dataCollectors[i].filter_chimeric_reads(min_ratio_chimeric, cell_names, feature_names, 0);
-			int total_umis2 = dataCollectors[i].get_total_umis();
-			int total_cells2 = dataCollectors[i].get_total_cells();
-			printf("After PCR chimeric filtering, %d (%.2f%%) UMIs and %d (%.2f%%) cells are kept.\n",
-				total_umis2, total_umis2 * 1.0 / total_umis_raw * 100,
-				total_cells2, total_cells2 * 1.0 / total_cells_raw * 100
-			);
+			if (feature_type == "crispr") {
+				if (umi_count_cutoff > 0)
+					printf("UMI count filtering by cutoff %d. ", umi_count_cutoff);
+				else
+					printf("No UMI count filtering. ");
+				printf("PCR chimeric filtering by ratio cutoff %.2f.\n", read_ratio_cutoff);
+				dataCollectors[i].filter_chimeric_reads(umi_count_cutoff, read_ratio_cutoff, cell_names, feature_names, 0);
+				int total_umis2 = dataCollectors[i].get_total_umis();
+				int total_cells2 = dataCollectors[i].get_total_cells();
+				printf("After UMI count and PCR chimeric filtering, %d (%.2f%%) UMIs and %d (%.2f%%) cells are kept.\n",
+					total_umis2, total_umis2 * 1.0 / total_umis_raw * 100,
+					total_cells2, total_cells2 * 1.0 / total_cells_raw * 100
+				);
+			}
 		}
 		end_ = time(NULL);
 		printf("UMI correction is finished. Time spent = %.2fs.\n", difftime(end_, interim_));
