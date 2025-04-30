@@ -670,7 +670,7 @@ int main(int argc, char* argv[]) {
 	else
 		for (int i = 0; i < n_cat; ++i) {
 			printf("Feature '%s':\n", cat_names[i].c_str());
-			dataCollectors[i].output(output_name + "." + cat_names[i], genome, feature_type, cat_nfs[i], cat_nfs[i + 1], cell_names, umi_len, feature_names, fout, n_threads, !correct_umi);
+			dataCollectors[i].output(output_name + "." + cat_names[i], genome, cat_names[i], cat_nfs[i], cat_nfs[i + 1], cell_names, umi_len, feature_names, fout, n_threads, !correct_umi);
 		}
 
 	end_ = time(NULL);
@@ -687,13 +687,13 @@ int main(int argc, char* argv[]) {
 			int total_umis1 = dataCollectors[i].get_total_umis();
 			printf("After UMI correction, %d (%.2f%%) UMIs are kept.\n", total_umis1, total_umis1 * 1.0 / total_umis_raw * 100);
 
-			if (feature_type == "crispr") {
+			if (feature_type == "crispr" || cat_names[i] == "crispr") {
 				if (umi_count_cutoff > 0)
 					printf("UMI count filtering by cutoff %d. ", umi_count_cutoff);
 				else
 					printf("No UMI count filtering. ");
 				printf("PCR chimeric filtering by ratio cutoff %.2f.\n", read_ratio_cutoff);
-				dataCollectors[i].filter_chimeric_reads(umi_count_cutoff, read_ratio_cutoff, cell_names, feature_names, 0);
+				dataCollectors[i].filter_chimeric_reads(umi_count_cutoff, read_ratio_cutoff);
 				int total_umis2 = dataCollectors[i].get_total_umis();
 				int total_cells2 = dataCollectors[i].get_total_cells();
 				printf("After UMI count and PCR chimeric filtering, %d (%.2f%%) UMIs and %d (%.2f%%) cells are kept.\n",

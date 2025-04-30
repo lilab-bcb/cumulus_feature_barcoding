@@ -147,7 +147,11 @@ void write_count_matrix_h5(
 		_create_h5_string_dataset(feature_grp, "id", &features, feature_str_len, 0, "");
 
 		// feature_type
-		std::string ftype = feature_type == "antibody" ? "Antibody Capture" : "CRISPR Guide Capture";
+		std::string ftype = "Custom";
+		if (feature_type == "crispr")  ftype = "CRISPR Guide Capture";
+		else if (feature_type == "hashing")  ftype = "Multiplexing Capture";
+		else if (feature_type == "citeseq" || feature_type == "antibody")  ftype = "Antibody Capture";
+
 		_create_h5_string_dataset(feature_grp, "feature_type", nullptr, ftype.length(), features.size(), ftype);
 
 		// genome
@@ -301,7 +305,7 @@ public:
 			}
 	}
 
-	void filter_chimeric_reads(int umi_count_cutoff, float read_ratio_cutoff, const std::vector<std::string>& cell_names, const std::vector<std::string>& feature_names, int feature_start) {
+	void filter_chimeric_reads(int umi_count_cutoff, float read_ratio_cutoff) {
 		UMI2FeatureCount umi_feature_table;
 		UMI2Count umi_total_reads;
 		Cell2Feature new_data;
