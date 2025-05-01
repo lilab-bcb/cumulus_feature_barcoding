@@ -308,19 +308,30 @@ public:
 	void filter_chimeric_reads(int umi_count_cutoff, float read_ratio_cutoff) {
 		UMI2FeatureCount umi_feature_table;
 		UMI2Count umi_total_reads;
-		Cell2Feature new_data;
+
+		Feature2UMI feature_umi_counts;
+		std::vector<int> empty_cells;
 
 		// Filter out UMIs of Count <= umi_count_cutoff if needed
 		if (umi_count_cutoff > 0) {
-			for (auto& p: data_container)
-				for (auto& kv1: p.second)
+			for (auto& p: data_container) {
+				for (auto& kv1: p.second) {
 					for (auto& kv2: kv1.second)
-						if (kv2.second > umi_count_cutoff)
-							new_data[p.first][kv1.first][kv2.first] = kv2.second;
-			this->data_container = new_data;
+						if (kv2.second <= umi_count_cutoff)
+							data_container[p.first][kv1.first].erase(kv2.first);
+					if (data_container[p.first][kv1.first].empty())
+						data_container[p.first].erase(kv1.first);
+				}
+				if (data_container[p.first].empty()) empty_cells.push_back(p.first);
+			}
+
+			if (!empty_cells.empty())
+				for (auto& cell_id: empty_cells)
+					data_container.erase(cell_id);
 		}
 
-		new_data.clear();
+		// Filter out PCR chimeric UMIs
+		empty_cells.clear();
 		for (auto& p: data_container) {
 			const int& cur_cell = p.first;
 
@@ -340,19 +351,25 @@ public:
 			}
 
 			// Filter out UMIs of Count <= read_ratio_cutoff * total_reads
+			feature_umi_counts.clear();
 			for (auto& kv1: umi_feature_table) {
 				const uint64_t& cur_umi = kv1.first;
 				float thresh = read_ratio_cutoff * umi_total_reads[cur_umi];
 				for (auto& v: kv1.second) {
 					const int& cur_feature = v.first;
 					const int& cur_count = v.second;
-					if (cur_count > thresh)
-						new_data[cur_cell][cur_feature][cur_umi] = cur_count;
+					if (cur_count > thresh) {
+						feature_umi_counts[cur_feature][cur_umi] = cur_count;
+					}
 				}
 			}
+			if (!feature_umi_counts.empty())  data_container[cur_cell] = feature_umi_counts;
+			else  empty_cells.push_back(cur_cell);
 		}
 
-		this->data_container = new_data;
+		if (!empty_cells.empty())
+			for (auto& cell_id: empty_cells)
+				data_container.erase(cell_id);
 	}
 
 private:
