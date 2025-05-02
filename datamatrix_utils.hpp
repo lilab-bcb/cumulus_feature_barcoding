@@ -214,6 +214,12 @@ public:
 		for (auto&& kv : data_container)
 			cell_ids.push_back(kv.first);
 		total_cells = cell_ids.size();
+
+		if (total_cells == 0) {
+			printf("Empty count matrix. No output file is generated.\n");
+			exit(-1);
+		}
+		
 		if (total_cells > 1) std::sort(cell_ids.begin(), cell_ids.end());
 
 		std::vector<int> dummy(total_cells, 0), tot_umis(total_cells, 0);
