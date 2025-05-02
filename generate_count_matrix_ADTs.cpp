@@ -272,7 +272,7 @@ void auto_detection() {
 		for (int i = 0; i < n_chems; ++i) {
 			cur_chem = it->second[i];
 			chem_names[i] = cur_chem;
-			printf("Loading %s cell barcode file...\n", cur_chem.c_str());
+			printf("[Auto-detection] Loading %s cell barcode file...\n", cur_chem.c_str());
 			parse_sample_sheet(cb_inclusion_file_dict[cur_chem], n_cb, len_cb, chem_cb_indexes[i], dummy, 0, false);
 		}
 
@@ -368,7 +368,7 @@ void auto_detection() {
 					if (cnt == nskim) break;
 				}
 
-				printf("ntotA = %d, ntotC = %d.\n", ntotA, ntotC);
+				printf("[Auto-detection] ntotA = %d, ntotC = %d.\n", ntotA, ntotC);
 				if (ntotA < 10 && ntotC < 10) {
 					printf("Error: Detected less than 10 feature barcodes in the first %d reads! Maybe you should consider to reverse complement your barcodes?\n", nskim);
 					exit(-1);
@@ -386,9 +386,9 @@ void auto_detection() {
 			totalseq_type = "";    // Customized assay, e.g. CellPlex using CMO
 
 		if (totalseq_type != "")
-			printf("TotalSeq type is automatically detected as %s. Barcodes starts from 0-based position %d.\n", totalseq_type.c_str(), barcode_pos);
+			printf("[Auto-detection] TotalSeq type is automatically detected as %s. Barcodes starts from 0-based position %d.\n", totalseq_type.c_str(), barcode_pos);
 		else
-			printf("Customized assay. Barcodes start from 0-based position %d, which is specified by the user.\n", barcode_pos);
+			printf("[Auto-detection] Customized assay. Barcodes start from 0-based position %d, which is specified by the user.\n", barcode_pos);
 
 	} else {
 		if (feature_type != "crispr") {
@@ -397,11 +397,11 @@ void auto_detection() {
 		}
 		if (barcode_pos < 0 && scaffold_sequence == "") {
 			barcode_pos = 0;  // default is 0
-			printf("Warning: Automatically set barcode start position to %d, as neither --barcode-pos nor --scaffold-sequence is specified.\n", barcode_pos);
+			printf("[Auto-detection] Warning: Automatically set barcode start position to %d, as neither --barcode-pos nor --scaffold-sequence is specified.\n", barcode_pos);
 		}
 	}
 
-	printf("Detect %s chemistry type.\n", chemistry.c_str());
+	printf("[Auto-detection] Detect %s chemistry type.\n", chemistry.c_str());
 }
 
 
@@ -677,7 +677,7 @@ int main(int argc, char* argv[]) {
 	printf("Outputs are written. Time spent = %.2fs.\n", difftime(end_, interim_));
 
 	if (correct_umi) {
-		printf("UMI correction is enabled. Use %s method for correction.\n", umi_correct_method.c_str());
+		printf("[UMI correction] UMI correction is enabled. Use %s method for correction.\n", umi_correct_method.c_str());
 		interim_ = time(NULL);
 		for (int i = 0; i < n_cat; ++i) {
 			int total_umis_raw = dataCollectors[i].get_total_umis();
@@ -685,25 +685,30 @@ int main(int argc, char* argv[]) {
 
 			dataCollectors[i].correct_umi(umi_len, umi_correct_method);
 			int total_umis1 = dataCollectors[i].get_total_umis();
-			printf("After UMI correction, %d (%.2f%%) UMIs are kept.\n", total_umis1, total_umis1 * 1.0 / total_umis_raw * 100);
+			printf("[UMI correction] After UMI correction, %d (%.2f%%) UMIs are kept.\n", total_umis1, total_umis1 * 1.0 / total_umis_raw * 100);
 
 			if (feature_type == "crispr" || (!cat_names.empty() && cat_names[i] == "crispr")) {
 				if (umi_count_cutoff > 0)
-					printf("UMI count filtering by cutoff %d. ", umi_count_cutoff);
+					printf("[UMI correction] UMI count filtering by cutoff %d.\n", umi_count_cutoff);
 				else
-					printf("No UMI count filtering. ");
-				printf("PCR chimeric filtering by ratio cutoff %.2f.\n", read_ratio_cutoff);
-				dataCollectors[i].filter_chimeric_reads(umi_count_cutoff, read_ratio_cutoff);
-				int total_umis2 = dataCollectors[i].get_total_umis();
-				int total_cells2 = dataCollectors[i].get_total_cells();
-				printf("After UMI count and PCR chimeric filtering, %d (%.2f%%) UMIs and %d (%.2f%%) cells are kept.\n",
-					total_umis2, total_umis2 * 1.0 / total_umis_raw * 100,
-					total_cells2, total_cells2 * 1.0 / total_cells_raw * 100
-				);
+					printf("[UMI correction] No UMI count filtering.\n");
+				
+				if (std::abs(read_ratio_cutoff) < std::numeric_limits<float>::epsilon())
+					printf("[UMI correction] No PCR chimeric filtering.\n");
+				else {
+					printf("[UMI correction] PCR chimeric filtering by ratio cutoff %.2f.\n", read_ratio_cutoff);
+					dataCollectors[i].filter_chimeric_reads(umi_count_cutoff, read_ratio_cutoff);
+					int total_umis2 = dataCollectors[i].get_total_umis();
+					int total_cells2 = dataCollectors[i].get_total_cells();
+					printf("[UMI correction] After UMI count and PCR chimeric filtering, %d (%.2f%%) UMIs and %d (%.2f%%) cells are kept.\n",
+						total_umis2, total_umis2 * 1.0 / total_umis_raw * 100,
+						total_cells2, total_cells2 * 1.0 / total_cells_raw * 100
+					);
+				}
 			}
 		}
 		end_ = time(NULL);
-		printf("UMI correction is finished. Time spent = %.2fs.\n", difftime(end_, interim_));
+		printf("[UMI correction] UMI correction is finished. Time spent = %.2fs.\n", difftime(end_, interim_));
 		interim_ = end_;
 
 		if (!detected_ftype)
@@ -713,7 +718,7 @@ int main(int argc, char* argv[]) {
 				dataCollectors[i].output(output_name + "." + cat_names[i] + ".correct", genome, feature_type, cat_nfs[i], cat_nfs[i + 1], cell_names, umi_len, feature_names, fout, n_threads, true, false);
 		fout.close();
 		end_ = time(NULL);
-		printf("UMI-corrected outputs are written. Time spent = %.2fs\n", difftime(end_, interim_));
+		printf("[UMI correction] UMI-corrected outputs are written. Time spent = %.2fs\n", difftime(end_, interim_));
 	}
 
 	fout.close();
