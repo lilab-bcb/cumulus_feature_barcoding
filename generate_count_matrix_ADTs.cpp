@@ -36,9 +36,9 @@ unordered_map<string, vector<string>> compound_chemistry_dict = {
 };
 
 unordered_map<string, string> cb_inclusion_file_dict = {
-	{"10x_v2", "737K-august-2016.txt"},
-	{"SC3Pv2", "737K-august-2016.txt"},
-	{"SC5Pv2", "737K-august-2016.txt"},
+	{"10x_v2", "737K-august-2016.txt.gz"},
+	{"SC3Pv2", "737K-august-2016.txt.gz"},
+	{"SC5Pv2", "737K-august-2016.txt.gz"},
 	{"SC3Pv3:Poly-A", "3M-february-2018_TRU.txt.gz"},
 	{"SC3Pv3:CS1", "3M-february-2018_NXT.txt.gz"},
 	{"SC3Pv4:Poly-A", "3M-3pgex-may-2023_TRU.txt.gz"},
@@ -525,13 +525,13 @@ int main(int argc, char* argv[]) {
 		printf("\t--genome genome_name\tgenome reference name. [default: \'\']\n");
 		printf("\t--chemistry chemistry_type\tchemistry type. [default: auto]\n");
 		printf("\t--max-mismatch-cell #\tmaximum number of mismatches allowed for cell barcodes. [default: auto-decided by chemistry]\n");
-		printf("\t--feature feature_type\tfeature type can be either antibody or crispr. [default: antibody]\n");
+		printf("\t--feature feature_type\tfeature type can be: antibody, hashing, citeseq, crispr. [default: antibody]\n");
 		printf("\t--max-mismatch-feature #\tmaximum number of mismatches allowed for feature barcodes. [default: 2]\n");
 		printf("\t--umi-length #\tlength of the UMI sequence. [default: auto-decided by chemistry]\n");
 		printf("\t--correct-umi\tIf correct UMI counts by merging similar UMI sequences as one.\n");
 		printf("\t--umi-correct-method method_name\tUMI correction method to use. Applies only when --correct-umi is enabled. Available options: \'cluster\', \'adjacency\', \'directional\'. [default: directional]\n");
 		printf("\t--umi-count-cutoff #\tRead count threshold (non-inclusive) to filter UMIs.  [default: 0]\n");
-		printf("\t--read-ratio-cutoff #\tRead count ratio threshold (non-inclusive) to filter chimeric reads.  [default: 0.5]\n");
+		printf("\t--read-ratio-cutoff #\tRead count ratio threshold (non-inclusive) to filter chimeric reads. Only works when '--feature crispr' is specified.  [default: 0.5]\n");
 		printf("\t--barcode-pos #\tstart position of barcode in read 2, 0-based coordinate. [default: automatically determined for antibody; 0 for crispr]\n");
 		printf("\t--scaffold-sequence sequence\tscaffold sequence used to locate the protospacer for sgRNA. This option is only used for crispr data. If --barcode-pos is not set and this option is set, try to locate barcode in front of the specified scaffold sequence.\n");
 		printf("Outputs:\n\toutput_name.csv\tfeature-cell count matrix. First row: [Antibody/CRISPR],barcode_1,...,barcode_n;Other rows: feature_name,feature_count_1,...,feature_count_n.\n");
@@ -687,7 +687,7 @@ int main(int argc, char* argv[]) {
 			int total_umis1 = dataCollectors[i].get_total_umis();
 			printf("After UMI correction, %d (%.2f%%) UMIs are kept.\n", total_umis1, total_umis1 * 1.0 / total_umis_raw * 100);
 
-			if (feature_type == "crispr" || cat_names[i] == "crispr") {
+			if (feature_type == "crispr" || (!cat_names.empty() && cat_names[i] == "crispr")) {
 				if (umi_count_cutoff > 0)
 					printf("UMI count filtering by cutoff %d. ", umi_count_cutoff);
 				else
