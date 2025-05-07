@@ -412,58 +412,79 @@ int main(int argc, char* argv[]) {
 	fout<< "Number of reads with valid cell, feature and UMI barcodes: "<< n_reads_valid_umi<< " ("<< fixed<< setprecision(2)<< n_reads_valid_umi * 100.0 / cnt << "%)" << endl;
 
 	if (!detected_ftype)
-		dataCollectors[0].output(output_name + "." + feature_type, genome, feature_type, 0, n_feature, cell_names, umi_len, feature_names, fout, n_threads, false);
+		dataCollectors[0].output(output_name + "." + feature_type, "raw", genome, feature_type, 0, n_feature, cell_names, umi_len, feature_names, fout, n_threads, false);
 	else
 		for (int i = 0; i < n_cat; ++i) {
 			printf("Feature '%s':\n", cat_names[i].c_str());
-			dataCollectors[i].output(output_name + "." + cat_names[i], genome, cat_names[i], cat_nfs[i], cat_nfs[i + 1], cell_names, umi_len, feature_names, fout, n_threads, false);
+			dataCollectors[i].output(output_name + "." + cat_names[i], "raw", genome, cat_names[i], cat_nfs[i], cat_nfs[i + 1], cell_names, umi_len, feature_names, fout, n_threads, false);
 		}
 
 	end_ = time(NULL);
 	printf("Outputs are written. Time spent = %.2fs.\n", difftime(end_, interim_));
 
-	printf("[UMI correction] UMI correction is enabled. Use %s method for correction.\n", umi_correct_method.c_str());
+	vector<int> total_umis_raw;
+	vector<int> total_cells_raw;
+	printf("[UMI correction] Use %s method for correction.\n", umi_correct_method.c_str());
 	interim_ = time(NULL);
 	for (int i = 0; i < n_cat; ++i) {
-		int total_umis_raw = dataCollectors[i].get_total_umis();
-		int total_cells_raw = dataCollectors[i].get_total_cells();
+		total_umis_raw.push_back(dataCollectors[i].get_total_umis());
+		total_cells_raw.push_back(dataCollectors[i].get_total_cells());
+		string cur_ftype = !detected_ftype ? feature_type : cat_names[i];
 
 		dataCollectors[i].correct_umi(umi_len, umi_correct_method);
-		int total_umis1 = dataCollectors[i].get_total_umis();
-		printf("[UMI correction] After UMI correction, %d (%.2f%%) UMIs are kept.\n", total_umis1, total_umis1 * 1.0 / total_umis_raw * 100);
-
-		if (feature_type == "crispr" || (!cat_names.empty() && cat_names[i] == "crispr")) {
-			if (umi_count_cutoff > 0)
-				printf("[UMI correction] UMI count filtering by cutoff %d.\n", umi_count_cutoff);
-			else
-				printf("[UMI correction] No UMI count filtering.\n");
-
-			if (std::abs(read_ratio_cutoff) < std::numeric_limits<float>::epsilon())
-				printf("[UMI correction] No PCR chimeric filtering.\n");
-			else {
-				printf("[UMI correction] PCR chimeric filtering by ratio cutoff %.2f.\n", read_ratio_cutoff);
-				dataCollectors[i].filter_chimeric_reads(umi_count_cutoff, read_ratio_cutoff);
-				int total_umis2 = dataCollectors[i].get_total_umis();
-				int total_cells2 = dataCollectors[i].get_total_cells();
-				printf("[UMI correction] After UMI count and PCR chimeric filtering, %d (%.2f%%) UMIs and %d (%.2f%%) cells are kept.\n",
-					total_umis2, total_umis2 * 1.0 / total_umis_raw * 100,
-					total_cells2, total_cells2 * 1.0 / total_cells_raw * 100
-				);
-			}
-		}
+		int total_umis = dataCollectors[i].get_total_umis();
+		printf("[UMI correction] After UMI correction, '%s' modality has %d (%.2f%%) UMIs kept.\n", cur_ftype.c_str(), total_umis, total_umis * 1.0 / total_umis_raw.back() * 100);
 	}
 	end_ = time(NULL);
 	printf("[UMI correction] UMI correction is finished. Time spent = %.2fs.\n", difftime(end_, interim_));
 	interim_ = end_;
 
 	if (!detected_ftype)
-		dataCollectors[0].output(output_name + "." + feature_type + ".correct", genome, feature_type, 0, n_feature, cell_names, umi_len, feature_names, fout, n_threads, true, false);
+		dataCollectors[0].output(output_name + "." + feature_type, "umi_correct", genome, feature_type, 0, n_feature, cell_names, umi_len, feature_names, fout, n_threads, false);
 	else
-		for (int i = 0; i < n_cat; ++i)
-			dataCollectors[i].output(output_name + "." + cat_names[i] + ".correct", genome, feature_type, cat_nfs[i], cat_nfs[i + 1], cell_names, umi_len, feature_names, fout, n_threads, true, false);
-	fout.close();
+		for (int i = 0; i < n_cat; ++i) {
+			printf("Feature '%s':\n", cat_names[i].c_str());
+			dataCollectors[i].output(output_name + "." + cat_names[i], "umi_correct", genome, cat_names[i], cat_nfs[i], cat_nfs[i + 1], cell_names, umi_len, feature_names, fout, n_threads, false);
+		}
 	end_ = time(NULL);
 	printf("[UMI correction] UMI-corrected outputs are written. Time spent = %.2fs\n", difftime(end_, interim_));
+	interim_ = end_;
+
+
+	for (int i = 0; i < n_cat; ++i) {
+		if (feature_type == "crispr" || (!cat_names.empty() && cat_names[i] == "crispr")) {
+			if (umi_count_cutoff > 0)
+				printf("[Chimeric filter] UMI count filtering by cutoff %d.\n", umi_count_cutoff);
+			else
+				printf("[Chimeric filter] No UMI count filtering.\n");
+
+			if (std::abs(read_ratio_cutoff) < std::numeric_limits<float>::epsilon())
+				printf("[Chimeric filter] No PCR chimeric filtering.\n");
+			else {
+				printf("[Chimeric filter] PCR chimeric filtering by ratio cutoff %.2f.\n", read_ratio_cutoff);
+				dataCollectors[i].filter_chimeric_reads(umi_count_cutoff, read_ratio_cutoff);
+				int total_umis = dataCollectors[i].get_total_umis();
+				int total_cells = dataCollectors[i].get_total_cells();
+				printf("[Chimeric filter] After UMI count and PCR chimeric filtering, %d (%.2f%%) UMIs and %d (%.2f%%) cells are kept.\n",
+					total_umis, total_umis * 1.0 / total_umis_raw[i] * 100,
+					total_cells, total_cells * 1.0 / total_cells_raw[i] * 100
+				);
+			}
+		}
+	}
+	end_ = time(NULL);
+	printf("[Chimeric filter] PCR chimeric filtering is finished. Time spent = %.2fs.\n", difftime(end_, interim_));
+	interim_ = end_;
+
+	if (!detected_ftype && feature_type == "crispr")
+		dataCollectors[0].output(output_name + "." + feature_type, "chimeric_filter", genome, feature_type, 0, n_feature, cell_names, umi_len, feature_names, fout, n_threads, true);
+	else
+		for (int i = 0; i < n_cat; ++i)
+			if (cat_names[i] == "crispr")
+				dataCollectors[i].output(output_name + "." + cat_names[i], "chimeric_filter", genome, feature_type, cat_nfs[i], cat_nfs[i + 1], cell_names, umi_len, feature_names, fout, n_threads, true);
+	fout.close();
+	end_ = time(NULL);
+	printf("[Chimeric filter] Chimeric filtered outputs are written. Time spent = %.2fs\n", difftime(end_, interim_));
 
 
 	fout.close();

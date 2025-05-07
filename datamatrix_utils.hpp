@@ -14,8 +14,9 @@
 #include "barcode_utils.hpp"
 #include "umi_utils.hpp"
 
-typedef std::unordered_map<int, UMI2Count> Feature2UMI;
-typedef std::unordered_map<int, Feature2UMI> Cell2Feature;
+typedef std::unordered_map<int32_t, UMI2Count> Feature2UMI;
+typedef std::unordered_map<int32_t, Feature2UMI> Cell2Feature;
+typedef std::unordered_map<uint64_t, std::vector<std::pair<int32_t, int>>> UMI2FeatureCount;
 
 const hsize_t CHUNK_SIZE = 80000;
 
@@ -192,6 +193,7 @@ public:
 
 	void output(
 		const std::string& output_name,
+		const std::string& step,
 		const std::string& genome,
 		const std::string& feature_type,
 		int feature_start,
@@ -201,8 +203,7 @@ public:
 		const std::vector<std::string>& feature_names,
 		std::ofstream& freport,
 		int n_threads,
-		bool verbose_report = true,
-		bool is_raw = true
+		bool verbose_report = true
 	) {
 		std::vector<int> cell_ids;
 		std::ofstream fout;
@@ -219,7 +220,7 @@ public:
 			printf("Empty count matrix. No output file is generated.\n");
 			exit(-1);
 		}
-		
+
 		if (total_cells > 1) std::sort(cell_ids.begin(), cell_ids.end());
 
 		std::vector<int> dummy(total_cells, 0), tot_umis(total_cells, 0);
@@ -275,20 +276,27 @@ public:
 				max_feature_name_len = feature_names[i].length();
 		}
 
-		write_molecule_info_h5(output_name, barcode_idx, barcodes, feature_idx, features, max_feature_name_len, umi_names, umi_counts, umi_len);
-		write_count_matrix_h5(output_name, csr_data, csr_indices, csr_indptr, total_cells, total_features, barcodes, features, max_feature_name_len, feature_type, genome);
+		write_molecule_info_h5(output_name + "." + step, barcode_idx, barcodes, feature_idx, features, max_feature_name_len, umi_names, umi_counts, umi_len);
+		write_count_matrix_h5(output_name + "." + step, csr_data, csr_indices, csr_indptr, total_cells, total_features, barcodes, features, max_feature_name_len, feature_type, genome);
 
-		if (is_raw) {
-			report_buffer << std::endl<< "Section "<< output_name<< std::endl;
+		if (step == "raw") {
+			report_buffer << std::endl<< "Section "<< output_name << std::endl;
 			report_buffer << "Number of valid cell barcodes: "<< total_cells<< std::endl;
 			report_buffer << "Number of valid reads (with matching cell and feature barcodes): "<< total_reads<< std::endl;
 			report_buffer << "Mean number of valid reads per cell barcode: "<< std::fixed<< std::setprecision(2)<< (total_cells > 0 ? total_reads * 1.0 / total_cells : 0.0)<< std::endl;
 			report_buffer << "Number of valid UMIs (with matching cell and feature barcodes): "<< total_umis<< std::endl;
 			report_buffer << "Mean number of valid UMIs per cell barcode: "<< std::fixed<< std::setprecision(2)<< (total_cells > 0 ? total_umis * 1.0 / total_cells : 0.0)<< std::endl;
 			report_buffer << "Sequencing saturation: "<< std::fixed<< std::setprecision(2)<< (total_reads > 0 ? 100.0 - total_umis * 100.0 / total_reads : 0.0)<< "%"<< std::endl;
-		} else {
+		} else if (step == "umi_correct") {
 			report_buffer << "After UMI correction:" << std::endl;
-			report_buffer << "\tNumber of valid cell barcodes:"<< total_cells<< std::endl;
+			report_buffer << "\tNo cell barcode is filtered" << std::endl;
+			report_buffer << "\tNumber of valid UMIs (with matching cell and feature barcodes): "<< total_umis<< std::endl;
+			report_buffer << "\tMean number of valid UMIs per cell barcode: "<< std::fixed<< std::setprecision(2)<< (total_cells > 0 ? total_umis * 1.0 / total_cells : 0.0)<< std::endl;
+			report_buffer << "\tSequencing saturation: "<< std::fixed<< std::setprecision(2)<< (total_reads > 0 ? 100.0 - total_umis * 100.0 / total_reads : 0.0)<< "%"<< std::endl;
+		} else {
+			assert(step == "chimeric_filter");
+			report_buffer << "After chimeric filtering:" << std::endl;
+			report_buffer << "\tNumber of valid cell barcodes: " << total_cells << std::endl;
 			report_buffer << "\tNumber of valid UMIs (with matching cell and feature barcodes): "<< total_umis<< std::endl;
 			report_buffer << "\tMean number of valid UMIs per cell barcode: "<< std::fixed<< std::setprecision(2)<< (total_cells > 0 ? total_umis * 1.0 / total_cells : 0.0)<< std::endl;
 			report_buffer << "\tSequencing saturation: "<< std::fixed<< std::setprecision(2)<< (total_reads > 0 ? 100.0 - total_umis * 100.0 / total_reads : 0.0)<< "%"<< std::endl;
@@ -313,40 +321,53 @@ public:
 
 	void filter_chimeric_reads(int umi_count_cutoff, float read_ratio_cutoff) {
 		UMI2FeatureCount umi_feature_table;
-		UMI2Count umi_total_reads;
+		UMI2Count umi_total_reads, umi_counts;
 
 		Feature2UMI feature_umi_counts;
-		std::vector<int> empty_cells;
+		std::vector<int> empty_cells, empty_features;
 
 		// Filter out UMIs of Count <= umi_count_cutoff if needed
 		if (umi_count_cutoff > 0) {
 			for (auto& p: data_container) {
+				const int32_t& cur_cell = p.first;
+				empty_features.clear();
 				for (auto& kv1: p.second) {
-					for (auto& kv2: kv1.second)
-						if (kv2.second <= umi_count_cutoff)
-							data_container[p.first][kv1.first].erase(kv2.first);
-					if (data_container[p.first][kv1.first].empty())
-						data_container[p.first].erase(kv1.first);
+					const int32_t& cur_feature = kv1.first;
+					umi_counts.clear();
+					for (auto& kv2: kv1.second) {
+						const uint64_t& cur_umi = kv2.first;
+						const int& cur_count = kv2.second;
+						if (cur_count > umi_count_cutoff)
+							umi_counts[cur_umi] = cur_count;
+					}
+					if (!umi_counts.empty())
+						data_container[cur_cell][cur_feature] = umi_counts;
+					else
+						empty_features.push_back(cur_feature);
 				}
-				if (data_container[p.first].empty()) empty_cells.push_back(p.first);
+
+				for (auto& feature_id: empty_features)
+					data_container[cur_cell].erase(feature_id);
+
+				if (data_container[cur_cell].empty())
+					empty_cells.push_back(cur_cell);
 			}
 
-			if (!empty_cells.empty())
-				for (auto& cell_id: empty_cells)
-					data_container.erase(cell_id);
+			for (auto& cell_id: empty_cells)
+				data_container.erase(cell_id);
 		}
 
 		// Filter out PCR chimeric UMIs
 		empty_cells.clear();
 		for (auto& p: data_container) {
-			const int& cur_cell = p.first;
+			const int32_t& cur_cell = p.first;
 
 			umi_feature_table.clear();
 			umi_total_reads.clear();
 
 			// Build hashmap: UMI -> [(Feature, Count)]
 			for (auto& kv1: p.second) {
-				const int& cur_feature = kv1.first;
+				const int32_t& cur_feature = kv1.first;
 				for (auto& kv2: kv1.second) {
 					const uint64_t& cur_umi = kv2.first;
 					const int& cur_count = kv2.second;
@@ -362,20 +383,22 @@ public:
 				const uint64_t& cur_umi = kv1.first;
 				float thresh = read_ratio_cutoff * umi_total_reads[cur_umi];
 				for (auto& v: kv1.second) {
-					const int& cur_feature = v.first;
+					const int32_t& cur_feature = v.first;
 					const int& cur_count = v.second;
 					if (cur_count > thresh) {
 						feature_umi_counts[cur_feature][cur_umi] = cur_count;
 					}
 				}
 			}
-			if (!feature_umi_counts.empty())  data_container[cur_cell] = feature_umi_counts;
-			else  empty_cells.push_back(cur_cell);
+			if (!feature_umi_counts.empty())  {
+				data_container[cur_cell].clear();
+				data_container[cur_cell] = feature_umi_counts;
+			} else
+				empty_cells.push_back(cur_cell);
 		}
 
-		if (!empty_cells.empty())
-			for (auto& cell_id: empty_cells)
-				data_container.erase(cell_id);
+		for (auto& cell_id: empty_cells)
+			data_container.erase(cell_id);
 	}
 
 private:
