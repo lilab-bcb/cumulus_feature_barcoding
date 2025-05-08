@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include <filesystem>
 
 #include "barcode_utils.hpp"
 #include "ReadParser.hpp"
@@ -76,7 +77,7 @@ void auto_detection(
 	} else {
 		// A compound chemistry is given. Auto-detect
 		int n_chems = it->second.size();
-		std::string cur_chem;
+		std::string cur_chem, cb_filename;
 		int n_cb, len_cb;
 		std::vector<std::string> dummy;  // Placeholder. Not used.
 		uint64_t binary_cb;
@@ -89,8 +90,11 @@ void auto_detection(
 		for (int i = 0; i < n_chems; ++i) {
 			cur_chem = it->second[i];
 			chem_names[i] = cur_chem;
+            cb_filename = cb_inclusion_file_dict[cur_chem];
             if (verbose)  printf("[Auto-detection] Loading %s cell barcode file...\n", cur_chem.c_str());
-			parse_sample_sheet(cb_inclusion_file_dict[cur_chem], n_cb, len_cb, chem_cb_indexes[i], dummy, 0, false);
+            if (!std::filesystem::exists(std::filesystem::path(cb_filename)))
+                printf("Warning: Cannot find cell barcode file '%s' for chemistry %s!\n", cb_filename.c_str(), cur_chem.c_str());
+			parse_sample_sheet(cb_filename, n_cb, len_cb, chem_cb_indexes[i], dummy, 0, false);
 		}
 
 		// Count cell barcode matches
