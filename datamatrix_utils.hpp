@@ -315,6 +315,7 @@ public:
 					continue;
 				ucs.clear();
 				ucs.build_set(kv.second, method);
+				data_container[p.first][kv.first].clear();
 				data_container[p.first][kv.first] = ucs.get_corrected_umi_counts();
 			}
 	}
@@ -340,9 +341,10 @@ public:
 						if (cur_count > umi_count_cutoff)
 							umi_counts[cur_umi] = cur_count;
 					}
-					if (!umi_counts.empty())
+					if (!umi_counts.empty()){
+						data_container[cur_cell][cur_feature].clear();
 						data_container[cur_cell][cur_feature] = umi_counts;
-					else
+					}else
 						empty_features.push_back(cur_feature);
 				}
 

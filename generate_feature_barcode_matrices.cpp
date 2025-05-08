@@ -371,7 +371,6 @@ int main(int argc, char* argv[]) {
 	parse_sample_sheet(cb_inclusion_file_dict[chemistry], n_cell, cell_blen, cell_index, cell_names, max_mismatch_cell);
 	end_ = time(NULL);
 	printf("Time spent on parsing cell barcodes = %.2fs.\n", difftime(end_, interim_));
-
 	interim_ = end_;
 
 	int np = min(max(1, n_threads / 3), (int)inputs.size());
