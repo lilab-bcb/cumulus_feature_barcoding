@@ -430,7 +430,7 @@ int main(int argc, char* argv[]) {
 
 		// Generate raw count matrix
 		start_1 = time(NULL);
-		dataCollectors[i].output(output_name + "." + cur_ftype, "raw", genome, cur_ftype, feature_start, feature_end, cell_names, umi_len, feature_names, fout, n_threads, false);
+		dataCollectors[i].output(output_name + "." + cur_ftype, "raw", genome, cur_ftype, feature_start, feature_end, cell_names, umi_len, feature_names, fout, false);
 		end_1 = time(NULL);
 		runtime_write_output += difftime(end_1, start_1);
 		total_umis_raw = dataCollectors[i].get_total_umis();
@@ -449,7 +449,7 @@ int main(int argc, char* argv[]) {
 		// Generate UMI correct count matrix
 		bool verbose_report = cur_ftype != "crispr" ? true : false;
 		start_1 = time(NULL);
-		dataCollectors[i].output(output_name + "." + cur_ftype, "umi_correct", genome, cur_ftype, feature_start, feature_end, cell_names, umi_len, feature_names, fout, n_threads, verbose_report);
+		dataCollectors[i].output(output_name + "." + cur_ftype, "umi_correct", genome, cur_ftype, feature_start, feature_end, cell_names, umi_len, feature_names, fout, verbose_report);
 		end_1 = time(NULL);
 		runtime_write_output += difftime(end_1, start_1);
 
@@ -476,7 +476,7 @@ int main(int argc, char* argv[]) {
 
 			// Generate chimeric filter count matrix
 			start_1 = time(NULL);
-			dataCollectors[i].output(output_name + "." + cur_ftype, "chimeric_filter", genome, cur_ftype, feature_start, feature_end, cell_names, umi_len, feature_names, fout, n_threads, true);
+			dataCollectors[i].output(output_name + "." + cur_ftype, "chimeric_filter", genome, cur_ftype, feature_start, feature_end, cell_names, umi_len, feature_names, fout, true);
 			end_1 = time(NULL);
 			runtime_write_output += difftime(end_1, start_1);
 		}

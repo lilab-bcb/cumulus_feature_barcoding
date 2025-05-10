@@ -202,7 +202,6 @@ public:
 		int umi_len,
 		const std::vector<std::string>& feature_names,
 		std::ofstream& freport,
-		int n_threads,
 		bool verbose_report = true
 	) {
 		std::vector<int> cell_ids;
