@@ -302,8 +302,11 @@ bool parse_feature_names(int n_feature, HashType& feature_index, std::vector<std
 			cnames[i] = tmp_cnames[indices[i]];
 		}
 	}
+
+	// Update feature IDs in feature_index accordingly; ignore if invalid (-1) or no change
 	for (auto iter = feature_index.begin(); iter != feature_index.end(); ++iter)
-		iter->second.vid = idx_map[iter->second.vid];
+		if (iter->second.vid != -1 && idx_map[iter->second.vid] != iter->second.vid)
+			iter->second.vid = idx_map[iter->second.vid];
 
 	// Get modality start and end indices
 	n_cat = 0;
