@@ -476,7 +476,7 @@ int main(int argc, char* argv[]) {
 
 			// Generate chimeric filter count matrix
 			start_1 = time(NULL);
-			dataCollectors[i].output(output_name + "." + cur_ftype, "chimeric_filter", genome, cur_ftype, feature_start, feature_end, cell_names, umi_len, feature_names, fout, true);
+			dataCollectors[i].output(output_name + "." + cur_ftype, "chimeric_filtered", genome, cur_ftype, feature_start, feature_end, cell_names, umi_len, feature_names, fout, true);
 			end_1 = time(NULL);
 			runtime_write_output += difftime(end_1, start_1);
 		}
