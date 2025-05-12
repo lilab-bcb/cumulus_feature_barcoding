@@ -403,7 +403,7 @@ int main(int argc, char* argv[]) {
 	string output_name = argv[5];
 	ofstream fout;
 
-	fout.open(output_name + "." + feature_type + ".report.txt");
+	fout.open(output_name + ".report.txt");
 	fout<< "Total number of reads: "<< cnt<< endl;
 	fout<< "Number of reads with valid cell barcodes: "<< n_valid_cell<< " ("<< fixed<< setprecision(2)<< n_valid_cell * 100.0 / cnt << "%)"<< endl;
 	fout<< "Number of reads with valid feature barcodes: "<< n_valid_feature<< " ("<< fixed<< setprecision(2)<< n_valid_feature * 100.0 / cnt << "%)"<< endl;
@@ -485,7 +485,7 @@ int main(int argc, char* argv[]) {
 	printf("Outputs are written. Time spent = %.2fs.\n", runtime_write_output);
 
 	fout.close();
-	printf("%s.%s.report.txt is written.\n", output_name.c_str(), feature_type.c_str());
+	printf("%s.report.txt is written.\n", output_name.c_str());
 	end_ = time(NULL);
 
 	printf("Total time spent (not including destruct objects) = %.2fs.\n", difftime(end_, start_));
