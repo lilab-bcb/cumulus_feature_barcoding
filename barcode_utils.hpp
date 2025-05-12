@@ -10,22 +10,37 @@
 #include <unordered_map>
 #include <algorithm>
 #include <numeric>
+#include <queue>
+#include <bit>
+#include <limits>
+#include <utility>
+
 
 struct ValueType {
-	int item_id;
-	char n_mis; // number of mismatches
+	int32_t vid;
+	uint32_t mask;  // positions of mismatch
 
-	ValueType() : item_id(-1), n_mis(0) {}
-	ValueType(int item_id, char n_mis) : item_id(item_id), n_mis(n_mis) {}
+	ValueType() : vid(-1), mask(0) {}
+	ValueType(int32_t vid, uint32_t mask) : vid(vid), mask(mask) {}
 };
 
 typedef std::unordered_map<uint64_t, ValueType> HashType;
 typedef HashType::iterator HashIterType;
 
+struct IndexType {
+	uint64_t bid;
+	int32_t vid;
+	uint32_t mask;
+
+	IndexType(): bid(0), vid(-1), mask(0) {}
+	IndexType(uint64_t bid, int32_t vid, uint32_t mask): bid(bid), vid(vid), mask(mask) {}
+};
+
 const int STEP = 3;
 const int BASE = 7;
 const int UPPER = 21;
 const int NNUC = 5; // ACGTN
+const uint64_t INVALID_UMI = static_cast<uint64_t>(-1);
 
 const char id2base[NNUC] = {'A', 'C', 'G', 'T', 'N'};
 
@@ -66,7 +81,7 @@ static std::vector<std::vector<uint64_t> > init_aux_arr() {
 
 static const std::vector<std::vector<uint64_t> > aux_arr = init_aux_arr();
 
-uint64_t barcode_to_binary(const std::string& barcode) {
+uint64_t barcode_to_binary(const std::string& barcode, bool check_N = false) {
 	uint64_t binary_id = 0;
 	char c;
 	if (barcode.length() > UPPER) {
@@ -75,6 +90,7 @@ uint64_t barcode_to_binary(const std::string& barcode) {
 	}
 	for (auto&& it = barcode.rbegin(); it != barcode.rend(); ++it) {
 		c = *it;
+		if (check_N && c == 'N') return -1;
 		if (base2id[c] < 0) {
 			printf("Barcode %s contains unknown bases %c!\n", barcode.c_str(), c);
 			exit(-1);
@@ -94,47 +110,22 @@ std::string binary_to_barcode(uint64_t binary_id, int len) {
 	return barcode;
 }
 
-inline bool insert(HashType& index_dict, uint64_t key, ValueType&& value) {
+inline bool insert(HashType& index_dict, uint64_t key, ValueType&& value, IndexType& record) {
 	std::pair<HashIterType, bool> ret;
 	ret = index_dict.insert(std::make_pair(key, value));
+	record.bid = key;
+	record.vid = value.vid;
+	record.mask = value.mask;
 	if (ret.second) return true;
-	if (ret.first->second.n_mis == 0 && value.n_mis == 0) {
+	if (ret.first->second.mask == 0 && value.mask == 0) {
 		printf("Cumulus identified two identical barcodes! Please check your barcode file.\n");
 		exit(-1);
 	}
-	if (ret.first->second.n_mis == 0 || value.n_mis == 0) {
-		printf("Mismatch value is too large. Please decrease the number of mismatches allowed.\n");
-		exit(-1);
+	if (std::popcount(ret.first->second.mask) == std::popcount(value.mask)) {
+		ret.first->second.vid = -1;
+		return false;
 	}
-	ret.first->second.item_id = -1;
-	return false;
-}
-
-inline void mutate_index_one_mismatch(HashType& index_dict, std::string& barcode, int item_id) {
-	int len = barcode.length();
-	uint64_t binary_id = barcode_to_binary(barcode);
-
-	insert(index_dict, binary_id, ValueType(item_id, 0));
-	for (int i = 0; i < len; ++i) {
-		uint64_t val = binary_id & aux_arr[i][NNUC];
-		for (int j = 0; j < NNUC; ++j)
-			if (val != aux_arr[i][j]) {
-				insert(index_dict, binary_id - val + aux_arr[i][j], ValueType(item_id, 1));
-			}
-	}
-}
-
-inline void mutate_index(HashType& index_dict, uint64_t binary_id, int len, int item_id, int max_mismatch, int mismatch, int pos) {
-	insert(index_dict, binary_id, ValueType(item_id, mismatch));
-	if (mismatch >= max_mismatch) return;
-
-	for (int i = pos; i < len; ++i) {
-		uint64_t val = binary_id & aux_arr[i][NNUC];
-		for (int j = 0; j < NNUC; ++j)
-			if (val != aux_arr[i][j]) {
-				mutate_index(index_dict, binary_id - val + aux_arr[i][j], len, item_id, max_mismatch, mismatch + 1, i + 1);
-			}
-	}
+	return true;
 }
 
 inline void ltrim(std::string &s) {
@@ -155,39 +146,7 @@ inline void trim(std::string &s) {
     ltrim(s);
 }
 
-inline void group_by_modality(HashType& index_dict, std::vector<std::string>& index_names) {
-	std::vector<int> indices(index_names.size());
-	std::iota(indices.begin(), indices.end(), 0);
-	std::sort(indices.begin(), indices.end(),
-		[&index_names](int l, int r) {
-			std::string s1 = index_names[l];
-			std::string s2 = index_names[r];
-			return s1.substr(s1.find_first_of(',') + 1) < s2.substr(s2.find_first_of(',') + 1);
-		}
-	);
-
-	bool already_sorted = true;
-	for (int i = 0; i < indices.size(); ++i)
-		if (indices[i] != i) {
-			already_sorted = false;
-			break;
-		}
-
-	// No action if barcodes are already grouped by modality column
-	if (already_sorted) return;
-
-	std::vector<int> idx_map(indices.size(), -1);
-	std::vector<std::string> tmp_names(index_names);
-	for (int i = 0; i < indices.size(); ++i) {
-		idx_map[indices[i]] = i;
-		index_names[i] = tmp_names[indices[i]];
-	}
-	for (auto iter = index_dict.begin(); iter != index_dict.end(); ++iter) {
-		iter->second.item_id = idx_map[iter->second.item_id];
-	}
-}
-
-inline void parse_one_line(const std::string& line, int& n_barcodes, int& barcode_len, HashType& index_dict, std::vector<std::string>& index_names, int max_mismatch) {
+inline void parse_one_line(const std::string& line, int& n_barcodes, int& barcode_len, HashType& index_dict, std::vector<std::string>& index_names, int max_mismatch, std::queue<IndexType>* buffer) {
 	std::string index_name, index_seq;
 	std::size_t pos;
 
@@ -201,18 +160,22 @@ inline void parse_one_line(const std::string& line, int& n_barcodes, int& barcod
 
 	if (index_seq.empty() && index_name.empty()) return;
 
-	if (barcode_len == 0) barcode_len = index_seq.length();
-	else assert(barcode_len == index_seq.length());
+	if (barcode_len == 0) {
+		barcode_len = index_seq.length();
+		assert(barcode_len <= UPPER);
+	} else
+		assert(barcode_len == index_seq.length());
 
-	if (max_mismatch == 1) mutate_index_one_mismatch(index_dict, index_seq, n_barcodes);
-	else mutate_index(index_dict, barcode_to_binary(index_seq), index_seq.length(), n_barcodes, max_mismatch, 0, 0);
+	IndexType index_record;
+	insert(index_dict, barcode_to_binary(index_seq), ValueType(n_barcodes, 0), index_record);
+	buffer->emplace(index_record);
 
-	index_names.push_back(index_name);
+	index_names.emplace_back(index_name);
 	++n_barcodes;
 }
 
 inline void skip_bom(std::string& line) {
-	size_t start = 0;
+	std::size_t start = 0;
 
 	if (line.length() >= 3 && line.substr(0, 3) == "\xEF\xBB\xBF")   // UTF-8
 		start = 3;
@@ -224,6 +187,38 @@ inline void skip_bom(std::string& line) {
 	line = line.substr(start);
 }
 
+void insert_index_mutations(HashType& index_dict, int barcode_len, int max_mismatch, std::queue<IndexType>* buffer1, std::queue<IndexType>* buffer2, bool verbose = true) {
+	int cur_mismatch = 1;
+	bool early_stop = false;
+	while (cur_mismatch <= max_mismatch) {
+		while (!buffer1->empty()) {
+			IndexType& index_val = buffer1->front();
+			// Start from the next position since the last mutation
+			int start_pos = std::numeric_limits<uint32_t>::digits - std::countl_zero(index_val.mask);
+			for (int i = start_pos; i < barcode_len; ++i) {
+				uint64_t val = index_val.bid & aux_arr[i][NNUC];
+				uint32_t mask = index_val.mask | (1 << i);
+				for (int j = 0; j < NNUC; ++j)
+					if (val != aux_arr[i][j]) {
+						uint64_t bid_new = index_val.bid - val + aux_arr[i][j];
+						IndexType index_ret;
+						if (!insert(index_dict, bid_new, ValueType(index_val.vid, mask), index_ret))
+							early_stop = true;
+						if (cur_mismatch < max_mismatch)
+							buffer2->emplace(bid_new, index_val.vid, mask);
+					}
+			}
+			buffer1->pop();
+		}
+		if (early_stop && cur_mismatch < max_mismatch) {
+			if (verbose) printf("max_mismatch %d is too high. Reset to %d.\n", max_mismatch, cur_mismatch);
+			return;
+		}
+		std::swap(buffer1, buffer2);
+		++cur_mismatch;
+	}
+}
+
 void parse_sample_sheet(const std::string& sample_sheet_file, int& n_barcodes, int& barcode_len, HashType& index_dict, std::vector<std::string>& index_names, int max_mismatch = 1, bool verbose = true) {
 	std::string line;
 
@@ -233,6 +228,8 @@ void parse_sample_sheet(const std::string& sample_sheet_file, int& n_barcodes, i
 	index_names.clear();
 
 	bool is_first_line = true;
+	std::queue<IndexType>* buffer1 = new std::queue<IndexType>();
+	std::queue<IndexType>* buffer2 = new std::queue<IndexType>();
 
 	if (sample_sheet_file.length() > 3 && sample_sheet_file.substr(sample_sheet_file.length() - 3, 3) == ".gz") { // input sample sheet is gzipped
 		iGZipFile gin(sample_sheet_file);
@@ -241,7 +238,7 @@ void parse_sample_sheet(const std::string& sample_sheet_file, int& n_barcodes, i
 				skip_bom(line);
 				is_first_line = false;
 			}
-			parse_one_line(line, n_barcodes, barcode_len, index_dict, index_names, max_mismatch);
+			parse_one_line(line, n_barcodes, barcode_len, index_dict, index_names, max_mismatch, buffer1);
 		}
 	}
 	else {
@@ -251,16 +248,82 @@ void parse_sample_sheet(const std::string& sample_sheet_file, int& n_barcodes, i
 				skip_bom(line);
 				is_first_line = false;
 			}
-			parse_one_line(line, n_barcodes, barcode_len, index_dict, index_names, max_mismatch);
+			parse_one_line(line, n_barcodes, barcode_len, index_dict, index_names, max_mismatch, buffer1);
 		}
 		fin.close();
 	}
+
+	insert_index_mutations(index_dict, barcode_len, max_mismatch, buffer1, buffer2, verbose);
+
+	delete buffer1;
+	delete buffer2;
+
 	if (verbose) printf("%s is parsed. n_barcodes = %d, and barcode_len = %d.\n", sample_sheet_file.c_str(), n_barcodes, barcode_len);
 
 	int n_amb = 0;
 	for (auto&& kv : index_dict)
-		if (kv.second.item_id < 0) ++n_amb;
+		if (kv.second.vid < 0) ++n_amb;
 	if (verbose) printf("In the index, %d out of %d items are ambigious, percentage = %.2f%%.\n", n_amb, (int)index_dict.size(), n_amb * 100.0 / index_dict.size());
+}
+
+bool parse_feature_names(int n_feature, HashType& feature_index, std::vector<std::string>& feature_names, int& n_cat, std::vector<std::string>& cat_names, std::vector<int>& cat_nfs, std::vector<int>& feature_categories) {
+	std::size_t pos;
+
+	pos = feature_names[0].find_first_of(',');
+	if (pos == std::string::npos) {
+		n_cat = 1;
+		return false;
+	}
+
+	std::vector<std::string> cnames;
+	for (int i = 0; i < n_feature; ++i) {
+		pos = feature_names[i].find_first_of(',');
+		assert(pos != std::string::npos);
+		cnames.push_back(feature_names[i].substr(pos + 1));
+		feature_names[i] = feature_names[i].substr(0, pos);
+	}
+
+	// Group features by modality
+	std::vector<int> indices(feature_names.size());
+	std::iota(indices.begin(), indices.end(), 0);
+	std::stable_sort(indices.begin(), indices.end(),
+		[&cnames](int l, int r) {
+			return cnames[l] < cnames[r];
+		}
+	);
+
+	std::vector<int> idx_map(indices.size(), -1);
+	std::vector<std::string> tmp_fnames(feature_names);
+	std::vector<std::string> tmp_cnames(cnames);
+	for (int i = 0; i < indices.size(); ++i) {
+		idx_map[indices[i]] = i;
+		if (indices[i] != i) {
+			feature_names[i] = tmp_fnames[indices[i]];
+			cnames[i] = tmp_cnames[indices[i]];
+		}
+	}
+
+	// Update feature IDs in feature_index accordingly; ignore if invalid (-1) or no change
+	for (auto iter = feature_index.begin(); iter != feature_index.end(); ++iter)
+		if (iter->second.vid != -1 && idx_map[iter->second.vid] != iter->second.vid)
+			iter->second.vid = idx_map[iter->second.vid];
+
+	// Get modality start and end indices
+	n_cat = 0;
+	cat_names.clear();
+	cat_nfs.clear();
+	feature_categories.resize(n_feature, 0);
+	for (int i = 0; i < n_feature; ++i) {
+		if (n_cat == 0 || cat_names.back() != cnames[i]) {
+			cat_names.push_back(cnames[i]);
+			cat_nfs.push_back(i);
+			++n_cat;
+		}
+		feature_categories[i] = n_cat - 1;
+	}
+	cat_nfs.push_back(n_feature);
+
+	return true;
 }
 
 #endif
