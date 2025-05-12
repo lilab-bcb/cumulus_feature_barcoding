@@ -293,7 +293,7 @@ public:
 			report_buffer << "\tMean number of valid UMIs per cell barcode: "<< std::fixed<< std::setprecision(2)<< (total_cells > 0 ? total_umis * 1.0 / total_cells : 0.0)<< std::endl;
 			report_buffer << "\tSequencing saturation: "<< std::fixed<< std::setprecision(2)<< (total_reads > 0 ? 100.0 - total_umis * 100.0 / total_reads : 0.0)<< "%"<< std::endl;
 		} else {
-			assert(step == "chimeric_filter");
+			assert(step == "chimeric_filtered");
 			report_buffer << "After chimeric filtering:" << std::endl;
 			report_buffer << "\tNumber of valid cell barcodes: " << total_cells << std::endl;
 			report_buffer << "\tNumber of valid UMIs (with matching cell and feature barcodes): "<< total_umis<< std::endl;
