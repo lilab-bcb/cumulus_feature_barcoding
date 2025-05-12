@@ -124,6 +124,9 @@ void auto_detection(
 				chem_snd_max = chem_max;
 				max_cnt = chem_cnts[i];
 				chem_max = chem_names[i];
+			} else if (chem_cnts[i] > snd_max_cnt) {
+				snd_max_cnt = chem_cnts[i];
+				chem_snd_max = chem_names[i];
 			}
 
 		if (max_cnt > 0) {
