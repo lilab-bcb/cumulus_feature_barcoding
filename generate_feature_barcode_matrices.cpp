@@ -298,7 +298,7 @@ int main(int argc, char* argv[]) {
 		printf("Outputs:\n\t<output_name>.<feature_type>.h5\tfeature-cell count matrix in 10x HDF5 format.\n");
 		printf("\t<output_name>.<feature_type>.molecule_info.h5\tSufficient statistics file in a simplied 10x HDF5 format. Each entry describe the read count for one barcode-umi-feature combination.\n\n");
 		printf("\tIf feature_category presents, this program will output the above two files for each feature_category. For example, if feature_category is hashing, <output_name>.hashing.h5 and <output_name>.hashing.molecule_info.h5 will be generated.\n");
-		printf("\t<output_name>.<feature_type>.report.txt\tA report file summarizing barcode, UMI and read results.\n");
+		printf("\t<output_name>.report.txt\tA report file summarizing barcode, UMI and read results.\n");
 		exit(-1);
 	}
 
