@@ -156,7 +156,7 @@ void write_count_matrix_h5(
 		_create_h5_string_dataset(feature_grp, "feature_type", nullptr, ftype.length(), features.size(), ftype);
 
 		// genome
-		_create_h5_string_dataset(feature_grp, "genome", nullptr, 1, features.size(), genome);
+		_create_h5_string_dataset(feature_grp, "genome", nullptr, genome.length(), features.size(), genome);
 		_create_h5_string_dataset(feature_grp, "_all_tag_keys", nullptr, 6, 1, "genome");
 
 	} catch (H5::Exception& error) {
