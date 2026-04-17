@@ -284,9 +284,10 @@ public:
 		write_molecule_info_h5(output_name + "." + step, barcode_idx, barcodes, feature_idx, features, max_feature_name_len, umi_names, umi_counts, umi_len);
 		write_count_matrix_h5(output_name + "." + step, csr_data, csr_indices, csr_indptr, total_cells, total_features, barcodes, features, max_feature_name_len, feature_type, genome);
 
+		// Print numbers in thousands separator format.
 		try {
 			report_buffer.imbue(std::locale("en_US.UTF-8"));
-		} catch (std::runtime_error&) {
+		} catch (std::runtime_error&) {  // In case macOS doesn't recognize "en_US.UTF-8" locale.
 			report_buffer.imbue(std::locale(""));
 		}
 

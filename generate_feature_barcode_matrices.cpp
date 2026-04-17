@@ -8,6 +8,7 @@
 #include <vector>
 #include <fstream>
 #include <iomanip>
+#include <locale>
 #include <algorithm>
 #include <memory>
 #include <atomic>
@@ -24,6 +25,8 @@
 
 using namespace std;
 
+// Helper function to print numbers in thousands separator format.
+// This is only used in C-style printf function.
 static string format_commas(long long n) {
 	string s = to_string(n);
 	int pos = (int)s.length() - 3;
@@ -410,6 +413,13 @@ int main(int argc, char* argv[]) {
 	ofstream fout;
 
 	fout.open(output_name + ".report.txt");
+
+	// Print numbers in thousands separator format.
+	try {
+		fout.imbue(std::locale("en_US.UTF-8"));
+	} catch (std::runtime_error&) { // In case macOS doesn't recognize "en_US.UTF-8" locale.
+		fout.imbue(std::locale(""));
+	}
 	fout<< "Total number of reads: "<< cnt<< endl;
 	fout<< "Number of reads with valid cell barcodes: "<< n_valid_cell<< " ("<< fixed<< setprecision(2)<< n_valid_cell * 100.0 / cnt << "%)"<< endl;
 	fout<< "Number of reads with valid feature barcodes: "<< n_valid_feature<< " ("<< fixed<< setprecision(2)<< n_valid_feature * 100.0 / cnt << "%)"<< endl;
