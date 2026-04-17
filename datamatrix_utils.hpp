@@ -222,14 +222,15 @@ public:
 
 		if (total_cells > 1) std::sort(cell_ids.begin(), cell_ids.end());
 
-		std::vector<int> dummy(total_cells, 0), tot_umis(total_cells, 0);
-		std::vector<std::vector<int> > ADTs(total_features, dummy);
-
 		// Collect molecule info and stats
-		std::vector<int> barcode_idx;
-		std::vector<int> feature_idx;
+		int total_umis_count = get_total_umis();
+		std::vector<int> barcode_idx, feature_idx, umi_counts;
 		std::vector<std::string> umi_names;
-		std::vector<int> umi_counts;
+		std::vector<int> tot_umis(total_cells, 0);
+		barcode_idx.reserve(total_umis_count);
+		feature_idx.reserve(total_umis_count);
+		umi_names.reserve(total_umis_count);
+		umi_counts.reserve(total_umis_count);
 		for (int i = 0; i < total_cells; ++i) {
 			auto& one_cell = data_container[cell_ids[i]];
 			for (auto&& kv1 : one_cell) {
@@ -240,29 +241,33 @@ public:
 					umi_counts.push_back(kv2.second);
 					total_reads += kv2.second;
 					++total_umis;
-					++ADTs[kv1.first - feature_start][i];
 					++tot_umis[i];
 				}
 			}
 		}
 
-		// Create a CSR sparse matrix.
-		std::vector<int> csr_data;
-		std::vector<int> csr_indices;
-		std::vector<int> csr_indptr;
+		// Create a CSR sparse matrix directly from data_container.
+		std::vector<int> csr_data, csr_indices, csr_indptr;
 		std::vector<std::string> barcodes;
+		barcodes.reserve(total_cells);
+		csr_indptr.reserve(total_cells + 1);
 
 		int indptr = 0;
 		csr_indptr.push_back(indptr);
+		std::vector<int32_t> sorted_features;
 		for (int i = 0; i < total_cells; ++i) {
 			if (tot_umis[i] == 0) continue;
+			auto& one_cell = data_container[cell_ids[i]];
 			barcodes.push_back(cell_names[cell_ids[i]]);
-			for (int j = feature_start; j < feature_end; ++j)
-				if (ADTs[j - feature_start][i] > 0) {
-					csr_data.push_back(ADTs[j - feature_start][i]);
-					csr_indices.push_back(j - feature_start);
-					++indptr;
-				}
+			sorted_features.clear();
+			sorted_features.reserve(one_cell.size());
+			for (auto& kv : one_cell) sorted_features.push_back(kv.first);
+			std::sort(sorted_features.begin(), sorted_features.end());
+			for (int32_t feat : sorted_features) {
+				csr_data.push_back(one_cell[feat].size());
+				csr_indices.push_back(feat - feature_start);
+				++indptr;
+			}
 			csr_indptr.push_back(indptr);
 		}
 
