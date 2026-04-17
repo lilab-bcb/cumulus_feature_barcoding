@@ -24,6 +24,12 @@
 
 using namespace std;
 
+static string format_commas(long long n) {
+	string s = to_string(n);
+	int pos = (int)s.length() - 3;
+	while (pos > 0) { s.insert(pos, ","); pos -= 3; }
+	return s;
+}
 
 string cb_dir;
 string chemistry;
@@ -270,7 +276,7 @@ void process_reads(ReadParser *parser, int thread_id) {
 		n_reads_valid_umi += n_reads_valid_umi_;
 
 		if (cnt - prev_cnt >= 1000000) {
-			printf("Processed %d reads.\n", cnt.load());
+			printf("Processed %s reads.\n", format_commas(cnt.load()).c_str());
 			prev_cnt = cnt.load();
 		}
 	}

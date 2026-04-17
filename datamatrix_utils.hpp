@@ -8,6 +8,7 @@
 #include <iomanip>
 #include <fstream>
 #include <sstream>
+#include <locale>
 #include <unordered_map>
 #include <H5Cpp.h>
 
@@ -282,6 +283,12 @@ public:
 
 		write_molecule_info_h5(output_name + "." + step, barcode_idx, barcodes, feature_idx, features, max_feature_name_len, umi_names, umi_counts, umi_len);
 		write_count_matrix_h5(output_name + "." + step, csr_data, csr_indices, csr_indptr, total_cells, total_features, barcodes, features, max_feature_name_len, feature_type, genome);
+
+		try {
+			report_buffer.imbue(std::locale("en_US.UTF-8"));
+		} catch (std::runtime_error&) {
+			report_buffer.imbue(std::locale(""));
+		}
 
 		if (step == "raw") {
 			report_buffer << std::endl<< "Section "<< output_name << std::endl;
