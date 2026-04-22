@@ -412,7 +412,6 @@ int main(int argc, char* argv[]) {
 	ofstream fout;
 
 	fout.open(output_name + ".report.txt");
-
 	fout<< "Total number of reads: "<< cnt<< endl;
 	fout<< "Number of reads with valid cell barcodes: "<< n_valid_cell<< " ("<< fixed<< setprecision(2)<< n_valid_cell * 100.0 / cnt << "%)"<< endl;
 	fout<< "Number of reads with valid feature barcodes: "<< n_valid_feature<< " ("<< fixed<< setprecision(2)<< n_valid_feature * 100.0 / cnt << "%)"<< endl;
