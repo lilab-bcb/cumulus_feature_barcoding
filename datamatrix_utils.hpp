@@ -207,7 +207,8 @@ public:
 		std::vector<int> cell_ids;
 		std::ofstream fout;
 
-		int total_cells = 0, total_reads = 0, total_umis = 0;
+		int total_cells = 0, total_umis = 0;
+		long total_reads = 0;
 		int total_features = feature_end - feature_start;
 
 		cell_ids.clear();
@@ -238,7 +239,7 @@ public:
 					feature_idx.push_back(kv1.first - feature_start);
 					umi_names.push_back(binary_to_barcode(kv2.first, umi_len));
 					umi_counts.push_back(kv2.second);
-					total_reads += kv2.second;
+					total_reads += static_cast<long>(kv2.second);
 					++total_umis;
 					++ADTs[kv1.first - feature_start][i];
 					++tot_umis[i];
