@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build and smoke test
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            libdeflate-dev \
+            libhdf5-dev \
+            libisal-dev
+
+      - name: Build
+        run: |
+          make clean
+          make all
+
+      - name: Smoke test CLI usage
+        run: |
+          test -x ./generate_feature_barcode_matrices
+
+          set +e
+          output=$(./generate_feature_barcode_matrices 2>&1)
+          exit_code=$?
+          set -e
+
+          test "$exit_code" -ne 0
+          grep -q "Usage: generate_feature_barcode_matrices" <<< "$output"
