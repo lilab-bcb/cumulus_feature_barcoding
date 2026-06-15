@@ -36,7 +36,7 @@ static string format_commas(long long n) {
 string cb_dir;
 string chemistry;
 
-atomic<int> cnt, n_valid, n_valid_cell, n_valid_feature, n_reads_valid_umi, prev_cnt; // cnt: total number of reads; n_valid, reads with valid cell barcode and feature barcode; n_valid_cell, reads with valid cell barcode; n_valid_feature, reads with valid feature barcode; prev_cnt: for printing # of reads processed purpose
+atomic<long> cnt, n_valid, n_valid_cell, n_valid_feature, n_reads_valid_umi, prev_cnt; // cnt: total number of reads; n_valid, reads with valid cell barcode and feature barcode; n_valid_cell, reads with valid cell barcode; n_valid_feature, reads with valid feature barcode; prev_cnt: for printing # of reads processed purpose
 
 int n_threads, max_mismatch_cell, max_mismatch_feature, umi_len;
 float read_ratio_cutoff;
@@ -405,7 +405,7 @@ int main(int argc, char* argv[]) {
 	result_buffer.clear();
 
 	end_ = time(NULL);
-	printf("Parsing input data is finished. %d reads are processed. Time spent = %.2fs.\n", cnt.load(), difftime(end_, interim_));
+	printf("Parsing input data is finished. %ld reads are processed. Time spent = %.2fs.\n", cnt.load(), difftime(end_, interim_));
 	interim_ = end_;
 
 	string output_name = argv[5];
