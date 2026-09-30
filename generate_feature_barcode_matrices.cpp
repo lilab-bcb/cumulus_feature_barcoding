@@ -43,6 +43,7 @@ float read_ratio_cutoff;
 int umi_count_cutoff;
 string genome, feature_type, totalseq_type, scaffold_sequence, umi_correct_method;
 int barcode_pos; // Antibody: Total-Seq A 0; Total-Seq B or C 10. Crispr: default 0, can be set by option
+int feature_remap_window; // Feature-only positional tolerance around barcode_pos
 
 time_t start_, interim_, end_;
 
@@ -235,11 +236,49 @@ void process_reads(ReadParser *parser, int thread_id) {
 			cell_iter = cell_index.find(binary_cell);
 			valid_cell = cell_iter != cell_index.end() && cell_iter->second.vid >= 0;
 
-			valid_feature = extract_feature_barcode(read2.seq, feature_blen, feature_type, feature_barcode);
-			if (valid_feature) {
-				binary_feature = barcode_to_binary(feature_barcode);
-				feature_iter = feature_index.find(binary_feature);
-				valid_feature = feature_iter != feature_index.end() && feature_iter->second.vid >= 0;
+			valid_feature = false;
+			feature_iter = feature_index.end();
+			if (feature_type == "crispr" && scaffold_sequence != "") {
+				// Scaffold-based CRISPR extraction determines the feature position
+				// from the scaffold; retain that specialized behavior.
+				valid_feature = extract_feature_barcode(read2.seq, feature_blen, feature_type, feature_barcode);
+				if (valid_feature) {
+					binary_feature = barcode_to_binary(feature_barcode);
+					feature_iter = feature_index.find(binary_feature);
+					valid_feature = feature_iter != feature_index.end() && feature_iter->second.vid >= 0;
+				}
+			} else {
+				// Search the configured feature position and its neighboring positions.
+				// A window hit is accepted only when all successful positions identify
+				// the same feature; conflicting feature IDs are treated as ambiguous.
+				int selected_vid = -1;
+				int selected_offset = -1;
+				bool ambiguous_feature = false;
+				for (int distance = 0; distance <= feature_remap_window && !ambiguous_feature; ++distance) {
+					// Try the configured position first, then nearer neighbors.
+					// This makes the tie-break deterministic and favors the expected offset.
+					int offsets[2] = {barcode_pos - distance, barcode_pos + distance};
+					int n_offsets = distance == 0 ? 1 : 2;
+					for (int oi = 0; oi < n_offsets && !ambiguous_feature; ++oi) {
+						int offset = offsets[oi];
+						if (offset < 0 || offset + feature_blen > (int)read2.seq.length()) continue;
+						feature_barcode = read2.seq.substr(offset, feature_blen);
+						binary_feature = barcode_to_binary(feature_barcode);
+						HashIterType candidate = feature_index.find(binary_feature);
+						if (candidate == feature_index.end() || candidate->second.vid < 0) continue;
+						if (selected_vid < 0) {
+							selected_vid = candidate->second.vid;
+							selected_offset = offset;
+						} else if (candidate->second.vid != selected_vid) {
+							ambiguous_feature = true;
+						}
+					}
+				}
+				if (selected_vid >= 0 && !ambiguous_feature) {
+					valid_feature = true;
+					feature_iter = feature_index.find(barcode_to_binary(
+						read2.seq.substr(selected_offset, feature_blen)));
+				}
 			}
 
 			n_valid_cell_ += valid_cell;
@@ -299,6 +338,7 @@ int main(int argc, char* argv[]) {
 		printf("\t--chemistry chemistry_type\tchemistry type. [default: auto]\n");
 		printf("\t--max-mismatch-feature #\tmaximum number of mismatches allowed for feature barcodes. [default: 2]\n");
 		printf("\t--barcode-pos #\tstart position of barcode in read 2, 0-based coordinate. [default: automatically determined for antibody; 0 for crispr]\n");
+		printf("\t--feature-remap-window #\tallow feature barcode matching at barcode-pos +/- #; cell barcodes are unaffected. [default: 0]\n");
 		printf("\t--scaffold-sequence sequence\tscaffold sequence used to locate the protospacer for sgRNA. This option is only used for crispr data. If --barcode-pos is not set and this option is set, try to locate barcode in front of the specified scaffold sequence.\n");
 		printf("\t--umi-correct-method method_name\tUMI correction method to use. Available options: \'cluster\', \'adjacency\', \'directional\'. [default: directional]\n");
 		printf("\t--umi-count-cutoff #\tRead count threshold (non-inclusive) to filter UMIs. Only works when <feature_type> is \'crispr\'.  [default: 0]\n");
@@ -322,6 +362,7 @@ int main(int argc, char* argv[]) {
 	umi_count_cutoff = 0;
 	read_ratio_cutoff = 0.5;
 	barcode_pos = -1;
+	feature_remap_window = 0;
 	totalseq_type = "";
 	scaffold_sequence = "";
 
@@ -353,6 +394,13 @@ int main(int argc, char* argv[]) {
 		}
 		if (!strcmp(argv[i], "--barcode-pos")) {
 			barcode_pos = stoi(argv[i + 1]);
+		}
+		if (!strcmp(argv[i], "--feature-remap-window")) {
+			feature_remap_window = stoi(argv[i + 1]);
+			if (feature_remap_window < 0) {
+				printf("'--feature-remap-window' must be non-negative!\n");
+				exit(-1);
+			}
 		}
 		if (!strcmp(argv[i], "--scaffold-sequence")) {
 			scaffold_sequence = argv[i + 1];
