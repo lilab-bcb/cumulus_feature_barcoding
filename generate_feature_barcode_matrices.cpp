@@ -250,8 +250,9 @@ void process_reads(ReadParser *parser, int thread_id) {
 				}
 			} else {
 				// Search the configured feature position and its neighboring positions.
-				// A window hit is accepted only when all successful positions identify
-				// the same feature; conflicting feature IDs are treated as ambiguous.
+				// Check the exact position first; if it matches a valid feature, stop.
+				// Otherwise, search neighboring positions when feature_remap_window > 0.
+				// Among fallback matches, conflicting feature IDs are treated as ambiguous.
 				int selected_vid = -1;
 				int selected_offset = -1;
 				bool ambiguous_feature = false;
