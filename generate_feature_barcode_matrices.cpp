@@ -37,6 +37,7 @@ string cb_dir;
 string chemistry;
 
 atomic<long> cnt, n_valid, n_valid_cell, n_valid_feature, n_reads_valid_umi, prev_cnt; // cnt: total number of reads; n_valid, reads with valid cell barcode and feature barcode; n_valid_cell, reads with valid cell barcode; n_valid_feature, reads with valid feature barcode; prev_cnt: for printing # of reads processed purpose
+atomic<long> feature_remap_rescue, feature_remap_same_id, feature_remap_ambiguous;
 
 int n_threads, max_mismatch_cell, max_mismatch_feature, umi_len;
 float read_ratio_cutoff;
@@ -254,7 +255,10 @@ void process_reads(ReadParser *parser, int thread_id) {
 				int selected_vid = -1;
 				int selected_offset = -1;
 				bool ambiguous_feature = false;
-				for (int distance = 0; distance <= feature_remap_window && !ambiguous_feature; ++distance) {
+				bool exact_position_valid = false;
+				for (int distance = 0;
+					distance <= feature_remap_window && !ambiguous_feature && !exact_position_valid;
+					++distance) {
 					// Try the configured position first, then nearer neighbors.
 					// This makes the tie-break deterministic and favors the expected offset.
 					int offsets[2] = {barcode_pos - distance, barcode_pos + distance};
@@ -266,6 +270,7 @@ void process_reads(ReadParser *parser, int thread_id) {
 						binary_feature = barcode_to_binary(feature_barcode);
 						HashIterType candidate = feature_index.find(binary_feature);
 						if (candidate == feature_index.end() || candidate->second.vid < 0) continue;
+						if (offset == barcode_pos) exact_position_valid = true;
 						if (selected_vid < 0) {
 							selected_vid = candidate->second.vid;
 							selected_offset = offset;
@@ -278,6 +283,11 @@ void process_reads(ReadParser *parser, int thread_id) {
 					valid_feature = true;
 					feature_iter = feature_index.find(barcode_to_binary(
 						read2.seq.substr(selected_offset, feature_blen)));
+				}
+				if (feature_remap_window > 0) {
+					if (ambiguous_feature) ++feature_remap_ambiguous;
+					else if (exact_position_valid) ++feature_remap_same_id;
+					else if (selected_vid >= 0) ++feature_remap_rescue;
 				}
 			}
 
@@ -421,6 +431,10 @@ int main(int argc, char* argv[]) {
 
 	// Determine chemistry, totalseq_type (for antibody assays), barcode_pos, umi_len, max_mismatch_cells
 	auto_detection(cb_dir, inputs, feature_type, feature_blen, feature_index, umi_len, chemistry, totalseq_type, max_mismatch_cell, barcode_pos, scaffold_sequence);
+	if (feature_remap_window > 0) {
+		printf("Feature barcode remapping enabled: checking positions %d +/- %d (cell barcodes unaffected).\n",
+			barcode_pos, feature_remap_window);
+	}
 
 	interim_ = time(NULL);
 	printf("Load cell barcodes.\n");
@@ -442,6 +456,9 @@ int main(int argc, char* argv[]) {
 	n_valid_cell =0 ;
 	n_valid_feature = 0;
 	n_reads_valid_umi = 0;
+	feature_remap_rescue = 0;
+	feature_remap_same_id = 0;
+	feature_remap_ambiguous = 0;
 
 	ReadParser *parser = new ReadParser(inputs, nt, np);
 
@@ -454,6 +471,10 @@ int main(int argc, char* argv[]) {
 
 	end_ = time(NULL);
 	printf("Parsing input data is finished. %ld reads are processed. Time spent = %.2fs.\n", cnt.load(), difftime(end_, interim_));
+	if (feature_remap_window > 0) {
+		printf("Feature remap diagnostics: rescued=%ld, same-feature=%ld, ambiguous=%ld.\n",
+			feature_remap_rescue.load(), feature_remap_same_id.load(), feature_remap_ambiguous.load());
+	}
 	interim_ = end_;
 
 	string output_name = argv[5];
@@ -463,6 +484,11 @@ int main(int argc, char* argv[]) {
 	fout<< "Total number of reads: "<< cnt<< endl;
 	fout<< "Number of reads with valid cell barcodes: "<< n_valid_cell<< " ("<< fixed<< setprecision(2)<< n_valid_cell * 100.0 / cnt << "%)"<< endl;
 	fout<< "Number of reads with valid feature barcodes: "<< n_valid_feature<< " ("<< fixed<< setprecision(2)<< n_valid_feature * 100.0 / cnt << "%)"<< endl;
+	if (feature_remap_window > 0) {
+		fout<< "Feature remap diagnostics - rescued: "<< feature_remap_rescue
+			<< ", same-feature: "<< feature_remap_same_id
+			<< ", ambiguous: "<< feature_remap_ambiguous << endl;
+	}
 	fout<< "Number of reads with valid cell and feature barcodes: "<< n_valid<< " ("<< fixed<< setprecision(2)<< n_valid * 100.0 / cnt << "%)"<< endl;
 	fout<< "Number of reads with valid cell, feature and UMI barcodes: "<< n_reads_valid_umi<< " ("<< fixed<< setprecision(2)<< n_reads_valid_umi * 100.0 / cnt << "%)" << endl;
 
