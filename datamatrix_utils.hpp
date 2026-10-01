@@ -24,6 +24,9 @@ const hsize_t CHUNK_SIZE = 80000;
 void _create_h5_string_dataset(H5::Group& group, const std::string& name, const std::vector<std::string>* data, size_t str_len, size_t data_size, std::string fillvalue) {
 	H5::DSetCreatPropList prop_list;
 	hsize_t dims_attr[1];
+	// HDF5 requires fixed-length string datatypes to have a positive size.
+	// Keep optional empty strings representable as one-byte empty strings.
+	str_len = std::max<size_t>(1, str_len);
 
 	if (data == nullptr) dims_attr[0] = data_size;
 	else dims_attr[0] = data->size();
